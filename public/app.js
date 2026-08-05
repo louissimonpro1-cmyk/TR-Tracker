@@ -1,9 +1,17 @@
 "use strict";
 
 // ---------- state ----------
+const loadSort = (key, fallback) => {
+  try {
+    const s = JSON.parse(localStorage.getItem(key));
+    return s && typeof s.key === "string" ? s : fallback;
+  } catch { return fallback; }
+};
 const state = {
   range: "max", dashboard: null, perf: null,
   showOwnPerf: localStorage.getItem("showOwnPerf") === "1",
+  posSort: loadSort("posSort", { key: "valueEur", dir: "desc" }),
+  arcSort: loadSort("arcSort", { key: "lastOpDate", dir: "desc" }),
 };
 const RANGES = [["1d", "1 J"], ["1w", "1 S"], ["1m", "1 M"], ["6m", "6 M"], ["1y", "1 A"], ["3y", "3 A"], ["max", "Tout"]];
 const RANGE_LABEL = {
@@ -339,24 +347,92 @@ const initials = (name) => name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("
 const hash = (s) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 
 function th(text, opts = {}) {
-  const e = el("th", (opts.cls || "") || null, text);
+  const e = el("th", (opts.cls || "") || null, opts.sortKey ? null : text);
   if (opts.rowspan) e.rowSpan = opts.rowspan;
   if (opts.colspan) e.colSpan = opts.colspan;
+  if (opts.sortKey) {
+    const { sort, onSort } = opts;
+    const active = sort.key === opts.sortKey;
+    const btn = el("button", "th-sort" + (active ? " on" : ""));
+    btn.type = "button";
+    btn.append(el("span", null, text));
+    btn.append(el("span", "th-arrow", active ? (sort.dir === "asc" ? "▲" : "▼") : "▾"));
+    btn.title = `Trier par ${text}`;
+    btn.addEventListener("click", () => onSort(opts.sortKey));
+    if (active) e.setAttribute("aria-sort", sort.dir === "asc" ? "ascending" : "descending");
+    e.append(btn);
+  }
   return e;
 }
 const tdNum = (text, cls) => el("td", cls || null, text);
 
+// a transaction price restated per current share carries its original value as a tooltip
+const splitNote = (raw) => `Prix ramené à une action d’aujourd’hui (opération sur titre depuis) — prix d’origine : ${price(raw)}`;
+function tdPrice(value, raw, cls) {
+  const td = tdNum(price(value), cls);
+  if (raw != null) { td.title = splitNote(raw); td.append(el("span", "approx", "↺")); }
+  return td;
+}
+
+// aggregate shown on the right of a section header (visible even when collapsed)
+function sectionSummary(id, eurValue, pctValue, title) {
+  const box = $(id);
+  if (!box) return;
+  box.replaceChildren();
+  if (eurValue == null) { box.hidden = true; return; }
+  box.hidden = false;
+  box.title = title;
+  box.className = "section-sum " + signCls(eurValue);
+  box.append(el("span", "ss-eur", eurS(eurValue)));
+  if (pctValue != null) box.append(el("span", "ss-pct", pct(pctValue, 1)));
+}
+
+// ---------- sorting ----------
+const getVal = (o, path) => path.split(".").reduce((v, k) => (v == null ? v : v[k]), o);
+
+function sortList(list, sort) {
+  const mul = sort.dir === "asc" ? 1 : -1;
+  return [...list].sort((a, b) => {
+    const x = getVal(a, sort.key), y = getVal(b, sort.key);
+    const xn = x == null || x === "", yn = y == null || y === "";
+    if (xn || yn) return xn && yn ? 0 : xn ? 1 : -1; // empty values always last
+    if (typeof x === "number" && typeof y === "number") return (x - y) * mul;
+    return String(x).localeCompare(String(y), "fr") * mul; // ISO dates compare fine
+  });
+}
+
+// toggles direction on the active column, otherwise applies the column's natural order
+function makeSorter(stateKey, storageKey, rerender) {
+  return (key) => {
+    const cur = state[stateKey];
+    state[stateKey] = cur.key === key
+      ? { key, dir: cur.dir === "asc" ? "desc" : "asc" }
+      : { key, dir: key === "name" ? "asc" : "desc" };
+    localStorage.setItem(storageKey, JSON.stringify(state[stateKey]));
+    rerender();
+  };
+}
+
+const sortPositions = makeSorter("posSort", "posSort", () => renderPositions());
+const shortDate = (d) => (d ? fmtDate.format(new Date(d + "T12:00:00Z")) : "—");
+
 function renderPositions() {
-  const list = state.dashboard.positions;
+  const list = sortList(state.dashboard.positions, state.posSort);
   $("posCount").textContent = `(${list.length})`;
+  const tot = state.dashboard.totals;
+  sectionSummary("posSummary", tot.unrealized, tot.unrealizedPct, "P&L latent des positions ouvertes");
   const table = $("posTable");
   table.replaceChildren();
 
   const expanded = state.showOwnPerf;
+  const sort = state.posSort, onSort = sortPositions;
   const thead = el("thead");
   const r1 = el("tr");
-  r1.append(th("Titre", { rowspan: 2, cls: "left" }));
-  for (const h of ["Qté", "Valeur", "Cours", "PRU", "+/− (%)", "+/− (€)"]) r1.append(th(h, { rowspan: 2 }));
+  r1.append(th("Titre", { rowspan: 2, cls: "left", sortKey: "name", sort, onSort }));
+  const mainCols = [["Qté", "qty"], ["Valeur", "valueEur"], ["Cours", "priceEur"], ["PRU", "avgBuy"],
+    ["+/− (%)", "perfPct"], ["+/− (€)", "perfEur"], ["P&L réalisé", "realized"]];
+  for (const [h, key] of mainCols) r1.append(th(h, { rowspan: 2, sortKey: key, sort, onSort }));
+  r1.append(th("Dernier achat", { colspan: 4, cls: "group sep" }));
   r1.append(th("Dernière vente", { colspan: 4, cls: "group sep" }));
   // "Performance du titre": collapsible column group
   const perfTh = th("", expanded ? { colspan: 6, cls: "group sep" } : { rowspan: 2, cls: "group sep toggle-col" });
@@ -370,15 +446,22 @@ function renderPositions() {
   perfTh.append(toggleBtn);
   r1.append(perfTh);
   const r2 = el("tr");
-  const saleCols = [["Prix vente", "sep"], ["Cours actuel", ""], ["Écart (%)", ""], ["Écart (€)", ""]];
-  const perfCols = expanded ? [["3 A", "sep"], ["1 A", ""], ["6 M", ""], ["1 M", ""], ["1 S", ""], ["1 J", ""]] : [];
-  for (const [h, cls] of [...saleCols, ...perfCols]) r2.append(th(h, { cls }));
+  const subCols = [
+    ["Prix", "lastBuyPrice", "sep"], ["Date", "lastBuyDate", ""], ["Écart (%)", "vsLastBuyPct", ""], ["Écart (€)", "vsLastBuyEur", ""],
+    ["Prix", "lastSellPrice", "sep"], ["Date", "lastSellDate", ""], ["Écart (%)", "vsLastSellPct", ""], ["Écart (€)", "vsLastSellEur", ""],
+  ];
+  const perfCols = expanded
+    ? [["3 A", "ownPerf.y3", "sep"], ["1 A", "ownPerf.y1", ""], ["6 M", "ownPerf.m6", ""],
+       ["1 M", "ownPerf.m1", ""], ["1 S", "ownPerf.w1", ""], ["1 J", "ownPerf.d1", ""]]
+    : [];
+  for (const [h, key, cls] of [...subCols, ...perfCols]) r2.append(th(h, { cls, sortKey: key, sort, onSort }));
   thead.append(r1, r2);
   table.append(thead);
 
   const tbody = el("tbody");
   for (const p of list) {
     const row = el("tr");
+    const sold = p.lastSellPrice != null;
     row.append(assetCell(p));
     row.append(tdNum(qty(p.qty)));
     row.append(tdNum(eur(p.valueEur)));
@@ -386,8 +469,13 @@ function renderPositions() {
     row.append(tdNum(price(p.avgBuy)));
     row.append(tdNum(pct(p.perfPct), signCls(p.perfPct)));
     row.append(tdNum(eurS(p.perfEur), signCls(p.perfEur)));
-    row.append(tdNum(price(p.lastSellPrice), "sep" + (p.lastSellPrice == null ? " na" : "")));
-    row.append(tdNum(price(p.lastSellPrice == null ? null : p.priceEur), p.lastSellPrice == null ? "na" : null));
+    row.append(tdNum(sold ? eurS(p.realized) : "—", sold ? signCls(p.realized) : "na"));
+    row.append(tdPrice(p.lastBuyPrice, p.lastBuyRaw, "sep"));
+    row.append(tdNum(shortDate(p.lastBuyDate)));
+    row.append(tdNum(pct(p.vsLastBuyPct), signCls(p.vsLastBuyPct)));
+    row.append(tdNum(priceS(p.vsLastBuyEur), signCls(p.vsLastBuyEur)));
+    row.append(sold ? tdPrice(p.lastSellPrice, p.lastSellRaw, "sep") : tdNum("—", "sep na"));
+    row.append(tdNum(sold ? shortDate(p.lastSellDate) : "—", sold ? null : "na"));
     row.append(tdNum(pct(p.vsLastSellPct), signCls(p.vsLastSellPct)));
     row.append(tdNum(priceS(p.vsLastSellEur), signCls(p.vsLastSellEur)));
     if (expanded) {
@@ -406,19 +494,27 @@ function renderPositions() {
   $("positionsCard").hidden = false;
 }
 
+const sortArchives = makeSorter("arcSort", "arcSort", () => renderArchives());
+
 function renderArchives() {
-  const list = state.dashboard.archives;
+  const list = sortList(state.dashboard.archives, state.arcSort);
   $("arcCount").textContent = `(${list.length})`;
+  const tot = state.dashboard.totals;
+  sectionSummary("arcSummary", tot.archivesRealized, tot.archivesRealizedPct, "P&L réalisé sur les positions soldées");
   const table = $("arcTable");
   table.replaceChildren();
 
+  const sort = state.arcSort, onSort = sortArchives;
   const thead = el("thead");
   const r1 = el("tr");
-  r1.append(th("Titre", { rowspan: 2, cls: "left" }));
-  for (const h of ["PRU achat", "PRU vente", "Perf (%)", "Perf (€)", "Dernière opération", "Dernière vente"]) r1.append(th(h, { rowspan: 2 }));
+  r1.append(th("Titre", { rowspan: 2, cls: "left", sortKey: "name", sort, onSort }));
+  const mainCols = [["PRU achat", "avgBuy"], ["PRU vente", "avgSell"], ["Perf (%)", "perfPct"],
+    ["Perf (€)", "perfEur"], ["Dernière opération", "lastOpDate"], ["Dernière vente", "lastSellPrice"]];
+  for (const [h, key] of mainCols) r1.append(th(h, { rowspan: 2, sortKey: key, sort, onSort }));
   r1.append(th("Depuis la vente", { colspan: 3, cls: "group sep" }));
   const r2 = el("tr");
-  for (const [h, cls] of [["Cours actuel", "sep"], ["Écart (%)", ""], ["Écart (€)", ""]]) r2.append(th(h, { cls }));
+  const subCols = [["Cours actuel", "currentPrice", "sep"], ["Écart (%)", "vsLastSellPct", ""], ["Écart (€)", "vsLastSellEur", ""]];
+  for (const [h, key, cls] of subCols) r2.append(th(h, { cls, sortKey: key, sort, onSort }));
   thead.append(r1, r2);
   table.append(thead);
 
@@ -430,7 +526,7 @@ function renderArchives() {
     row.append(tdNum(price(a.avgSell)));
     row.append(tdNum(pct(a.perfPct), signCls(a.perfPct)));
     row.append(tdNum(eurS(a.perfEur), signCls(a.perfEur)));
-    row.append(tdNum(a.lastOpDate ? fmtDate.format(new Date(a.lastOpDate + "T12:00:00Z")) : "—"));
+    row.append(tdNum(shortDate(a.lastOpDate)));
     row.append(tdNum(price(a.lastSellPrice)));
     row.append(tdNum(price(a.currentPrice), "sep" + (a.currentPrice == null ? " na" : "")));
     row.append(tdNum(pct(a.vsLastSellPct), signCls(a.vsLastSellPct)));
@@ -700,18 +796,23 @@ function renderPositionCards(list) {
     sub.append(el("span", "pcard-pl " + signCls(p.perfEur), `${pct(p.perfPct)} · ${eurS(p.perfEur)}`));
 
     const grid = el("div", "pcard-grid g3");
+    const sold = p.lastSellPrice != null;
     grid.append(kv("PRU", price(p.avgBuy)));
-    grid.append(kv("Dernière vente", p.lastSellPrice == null ? "—" : price(p.lastSellPrice), null, "kv-c",
-      p.lastSellDate ? fmtDate.format(new Date(p.lastSellDate + "T12:00:00Z")) : null));
+    grid.append(kv("Dernier achat", price(p.lastBuyPrice), null, "kv-c", shortDate(p.lastBuyDate)));
+    grid.append(kv("Depuis l’achat",
+      p.lastBuyPrice == null ? "—" : `${pct(p.vsLastBuyPct)}\n${priceS(p.vsLastBuyEur)}`,
+      p.lastBuyPrice == null ? null : signCls(p.vsLastBuyPct), "kv-r"));
+    grid.append(kv("Investi", eur(p.investedEur)));
+    grid.append(kv("Dernière vente", sold ? price(p.lastSellPrice) : "—", null, "kv-c",
+      sold ? shortDate(p.lastSellDate) : null));
     grid.append(kv("Depuis la vente",
-      p.lastSellPrice == null ? "—" : `${pct(p.vsLastSellPct)}\n${priceS(p.vsLastSellEur)}`,
-      p.lastSellPrice == null ? null : signCls(p.vsLastSellPct), "kv-r"));
+      sold ? `${pct(p.vsLastSellPct)}\n${priceS(p.vsLastSellEur)}` : "—",
+      sold ? signCls(p.vsLastSellPct) : null, "kv-r"));
 
     // realized P&L on this asset (money actually banked by selling shares so far)
     const realized = el("div", "pcard-realized");
     realized.append(el("span", "pr-label", "P&L réalisé sur ventes"));
-    const hasSold = p.lastSellPrice != null;
-    realized.append(el("span", "pr-value " + (hasSold ? signCls(p.realized) : "na"), hasSold ? eurS(p.realized) : "—"));
+    realized.append(el("span", "pr-value " + (sold ? signCls(p.realized) : "na"), sold ? eurS(p.realized) : "—"));
 
     box.append(makeCard(cardHead(p, eur(p.valueEur), null, p.ownPerf?.d1), sub, [grid, realized, assetPerfFold(p)]));
   }

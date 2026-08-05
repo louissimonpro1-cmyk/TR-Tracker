@@ -78,6 +78,11 @@ l'accès local est direct (pas de page de connexion). Le premier chargement pren
   la série est comparée aux prix des transactions elles-mêmes et rescalée si l'écart
   médian dépasse 4 % avec au moins 3 transactions concordantes (mauvaise classe de
   parts renvoyée par la recherche ISIN, split survenu après la clôture d'une position).
+- **Prix des dernières opérations** : le prix du dernier achat / de la dernière vente
+  est ramené à une action d'aujourd'hui quand une opération sur titre a eu lieu depuis
+  (marqueur « ↺ » et prix d'origine en info-bulle), sinon la comparaison avec le cours
+  actuel n'aurait aucun sens (ex. 567,90 € payés avant un split 10:1 = 56,79 € par
+  action actuelle).
 - **Actifs non cotés sur Yahoo** (warrants, certificats) : valorisés par interpolation
   linéaire entre les prix observés dans les transactions, badge « ≈ » dans l'interface.
 - **La vue « 1 J »** agrège les barres 5 min de la dernière séance disponible ; si les

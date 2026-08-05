@@ -80,9 +80,17 @@ h2 { font-size: 16px; font-weight: 650; margin-bottom: 4px; }
 .section-fold > summary::-webkit-details-marker { display: none; }
 .section-fold > summary h2 { margin-bottom: 0; }
 .section-fold > summary::after {
-  content: "▸"; margin-left: auto; color: var(--muted); font-size: 14px;
+  content: "▸"; margin-left: 12px; color: var(--muted); font-size: 14px;
   transition: transform 0.15s ease;
 }
+.section-sum {
+  margin-left: auto; display: flex; align-items: baseline; gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.section-sum .ss-eur { font-size: 14px; font-weight: 650; }
+.section-sum .ss-pct { font-size: 12px; opacity: 0.85; }
+.section-sum.pos { color: var(--up-text); }
+.section-sum.neg { color: var(--down-text); }
 .section-fold[open] > summary::after { transform: rotate(90deg); }
 .section-fold > summary:hover::after { color: var(--text); }
 .section-fold > .hint { margin-top: 6px; }
@@ -151,19 +159,37 @@ h2 { font-size: 16px; font-weight: 650; margin-bottom: 4px; }
 .chart-table table { margin-top: 8px; }
 
 /* ---------- tables ---------- */
-.scroll-x { overflow-x: auto; margin-top: 8px; }
+/* bounded height so the sticky headers have a scrollport to stick to */
+.scroll-x { overflow: auto; margin-top: 8px; max-height: 74vh; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 thead th {
   color: var(--muted); font-size: 10.5px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.05em;
-  padding: 8px 10px; border-bottom: 1px solid var(--border);
-  text-align: right; white-space: nowrap;
+  padding: 8px 10px; text-align: right; white-space: nowrap;
+  /* sticky column headers; inset shadow instead of border (borders detach when sticky) */
+  position: sticky; top: 0; z-index: 3;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border);
 }
+thead tr:first-child th { height: var(--th-row1-h, 29px); }
+thead tr:nth-child(2) th { top: var(--th-row1-h, 29px); }
 thead th.left { text-align: left; }
 thead th.group {
-  text-align: center; border-bottom: 0; padding-bottom: 0;
+  text-align: center; padding-bottom: 0; box-shadow: none;
   color: var(--text-2); font-weight: 700;
 }
+/* sortable header buttons */
+.th-sort {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit;
+  display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+}
+.th-sort:hover { color: var(--text-2); }
+.th-sort.on { color: var(--text); }
+.th-arrow { font-size: 8px; opacity: 0; }
+.th-sort:hover .th-arrow { opacity: 0.6; }
+.th-sort.on .th-arrow { opacity: 1; }
+th.left .th-sort { justify-content: flex-start; }
 .group-toggle {
   background: none; border: 0; cursor: pointer; padding: 0;
   font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit;
@@ -188,12 +214,13 @@ td.sep, th.sep { border-left: 1px solid var(--grid); }
 .na { color: var(--baseline); }
 .small-pct { font-size: 12px; }
 
-/* sticky asset column */
+/* sticky asset column (the header cell is sticky on both axes, so it sits on top) */
 .data-table th:first-child, .data-table td:first-child {
   position: sticky; left: 0; z-index: 2;
   background: var(--surface);
   border-right: 1px solid var(--grid);
 }
+.data-table thead th:first-child { z-index: 5; }
 .data-table tbody tr:hover td:first-child { background: var(--surface); }
 
 /* asset cell */

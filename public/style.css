@@ -420,8 +420,101 @@ details.pcard[open] .pcard-chev { transform: rotate(90deg); }
   line-height: 1.7;
 }
 
+/* ---------- alerts: bell, settings dialog, triggered popup ---------- */
+.head-right { display: flex; align-items: center; gap: 12px; }
+.bell {
+  position: relative; display: grid; place-items: center; flex: none;
+  width: 34px; height: 34px; padding: 0;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-2);
+  border-radius: 10px; cursor: pointer;
+}
+.bell:hover, .bell.on { color: var(--text); }
+.bell-dot {
+  position: absolute; top: 5px; right: 5px; width: 8px; height: 8px;
+  background: var(--down); border-radius: 50%; box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* `margin: auto` is what centres a modal <dialog>; the global `* { margin: 0 }` reset
+   at the top of this file strips it, so it has to be put back explicitly */
+.modal { border: 0; padding: 0; background: transparent; width: min(560px, calc(100vw - 24px)); margin: auto; }
+.modal::backdrop { background: rgba(0, 0, 0, 0.45); }
+.modal-box {
+  display: flex; flex-direction: column; gap: 16px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 16px; padding: 20px 22px;
+  max-height: calc(100dvh - 40px); overflow-y: auto;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.modal-head h2 { font-size: 17px; font-weight: 650; }
+.modal-x {
+  border: 0; background: transparent; color: var(--muted);
+  font-size: 15px; line-height: 1; padding: 4px; cursor: pointer;
+}
+.modal-x:hover { color: var(--text); }
+.modal-hint { color: var(--muted); font-size: 12px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.btn-primary, .btn-secondary {
+  border-radius: 9px; padding: 8px 15px; cursor: pointer;
+  font: 600 13px system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.btn-primary { border: 0; background: var(--text); color: var(--page); }
+.btn-secondary { border: 1px solid var(--border); background: var(--surface); color: var(--text-2); }
+.btn-secondary:hover { color: var(--text); }
+.btn-primary:disabled, .btn-secondary:disabled { opacity: 0.55; cursor: default; }
+
+.switch-row { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.switch-row input { flex: none; width: 16px; height: 16px; margin-top: 2px; accent-color: var(--text); }
+.switch-row span { display: flex; flex-direction: column; font-size: 13px; }
+.switch-row em { color: var(--muted); font-size: 12px; font-style: normal; }
+
+.field-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+.field-row input[type="time"] {
+  background: var(--page); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font: inherit; padding: 6px 9px;
+}
+.field-note { color: var(--muted); font-size: 12px; }
+
+/* three rows (PRU / dernier achat / dernière vente) x two directions */
+.thresholds { display: grid; grid-template-columns: 1fr auto auto; gap: 8px 12px; align-items: center; }
+.th-head {
+  color: var(--muted); font-size: 10.5px; letter-spacing: 0.05em;
+  text-transform: uppercase; text-align: center;
+}
+.th-label { font-size: 13px; color: var(--text-2); }
+.th-cell { display: flex; align-items: center; gap: 5px; justify-content: center; }
+.th-sign { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.th-cell input {
+  width: 64px; text-align: right; padding: 6px 8px;
+  background: var(--page); border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+  font: 600 13px system-ui, -apple-system, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums;
+}
+.th-cell input:focus-visible { outline: 2px solid var(--baseline); outline-offset: 1px; }
+
+.push-block {
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+  background: var(--wash); border-radius: 12px; padding: 13px 14px;
+}
+.push-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; font-size: 13px; }
+.push-state { color: var(--muted); font-size: 12px; }
+.push-state.on { color: var(--up-text); }
+
+.trigger-list { display: flex; flex-direction: column; gap: 9px; }
+.trigger {
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid var(--grid); border-radius: 12px; padding: 11px 13px;
+}
+.tg-main { flex: 1; min-width: 0; }
+.tg-name { font-size: 13.5px; font-weight: 600; }
+.tg-sub { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.tg-pct { font-size: 15px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
 /* ---------- responsive ---------- */
 @media (max-width: 680px) {
+  .modal-box { padding: 16px; border-radius: 14px; gap: 14px; }
+  .thresholds { grid-template-columns: 1fr auto auto; gap: 7px 8px; }
+  .th-cell input { width: 56px; }
+  .th-label { font-size: 12.5px; }
+  .head-right { width: 100%; justify-content: space-between; }
   .wrap { padding: 16px 12px 32px; }
   .card { padding: 16px; border-radius: 12px; }
   .hero-value { font-size: 31px; }

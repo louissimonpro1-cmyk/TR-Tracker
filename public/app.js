@@ -23,6 +23,11 @@ const state = {
   accountFilter: loadAccountFilter(), // Set<accountId>|null — null means "every account"
   customFrom: localStorage.getItem("customFrom") || "",
   customTo: localStorage.getItem("customTo") || "",
+  // alerts: filled in by the bootstrap at the end of the file, because loadAlertConfig()
+  // reads ALERT_RULES, which is declared further down and still in its temporal dead zone
+  alertConfig: null,
+  alertTriggers: [],
+  alertSeen: localStorage.getItem("alertSeen") || "", // signature of the last dismissed set
 };
 const RANGES = [
   ["1d", "1 J"], ["1w", "1 S"], ["1m", "1 M"], ["6m", "6 M"], ["1y", "1 A"],
@@ -1119,6 +1124,255 @@ $("customRange").addEventListener("submit", (e) => {
   reloadPerf();
 });
 
+// ---------- price alerts ----------
+// Rules mirrored from lib/alerts.mjs — keep the two tables in step. Thresholds are
+// positive magnitudes and `dir` carries the direction, so nobody types a minus sign.
+// Evaluating here (rather than calling the API) means the dialog works off the
+// dashboard payload already in memory, with no extra round-trip and no server state.
+const ALERT_RULES = [
+  { id: "pruUp", field: "perfPct", dir: 1, ref: "avgBuy", label: "au-dessus du PRU" },
+  { id: "pruDown", field: "perfPct", dir: -1, ref: "avgBuy", label: "sous le PRU" },
+  { id: "buyUp", field: "vsLastBuyPct", dir: 1, ref: "lastBuyPrice", label: "au-dessus du dernier achat" },
+  { id: "buyDown", field: "vsLastBuyPct", dir: -1, ref: "lastBuyPrice", label: "sous le dernier achat" },
+  { id: "sellUp", field: "vsLastSellPct", dir: 1, ref: "lastSellPrice", label: "au-dessus de la dernière vente" },
+  { id: "sellDown", field: "vsLastSellPct", dir: -1, ref: "lastSellPrice", label: "sous la dernière vente" },
+];
+const ALERT_GROUPS = [
+  ["Par rapport au PRU", "pruUp", "pruDown"],
+  ["Dernier achat", "buyUp", "buyDown"],
+  ["Dernière vente", "sellUp", "sellDown"],
+];
+const BROWSER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Paris";
+const PUSH_SUPPORTED = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+
+function normalizeAlertConfig(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const hour = Number(src.hour);
+  const thresholds = {};
+  for (const r of ALERT_RULES) {
+    const v = Number(src.thresholds?.[r.id]);
+    // 0 would fire on nearly every position — treat it as "not set"
+    thresholds[r.id] = Number.isFinite(v) && Math.abs(v) > 0 ? Math.abs(v) : null;
+  }
+  return {
+    enabled: !!src.enabled,
+    hour: Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : 9,
+    tz: typeof src.tz === "string" && src.tz ? src.tz : BROWSER_TZ,
+    thresholds,
+  };
+}
+function loadAlertConfig() {
+  try { return normalizeAlertConfig(JSON.parse(localStorage.getItem("alertConfig"))); }
+  catch { return normalizeAlertConfig(null); }
+}
+const anyThreshold = (c) => ALERT_RULES.some((r) => c.thresholds[r.id] != null);
+
+function evaluateAlerts(dash, config) {
+  const out = [];
+  if (!dash || !config.enabled) return out;
+  for (const account of dash.accounts) {
+    for (const p of account.positions) {
+      for (const rule of ALERT_RULES) {
+        const threshold = config.thresholds[rule.id];
+        if (threshold == null) continue;
+        const actual = p[rule.field];
+        if (actual == null) continue;             // never bought/sold, or no quote
+        if (rule.dir > 0 ? actual < threshold : actual > -threshold) continue;
+        out.push({
+          id: `${p.key}|${rule.id}`, position: p, accountLabel: account.label,
+          label: rule.label, threshold: rule.dir > 0 ? threshold : -threshold,
+          actualPct: actual, refPrice: p[rule.ref] ?? null,
+        });
+      }
+    }
+  }
+  return out.sort((a, b) => Math.abs(b.actualPct) - Math.abs(a.actualPct));
+}
+
+function recomputeAlerts() {
+  state.alertTriggers = evaluateAlerts(state.dashboard, state.alertConfig);
+}
+const triggerSignature = (list) => list.map((t) => t.id).sort().join(",");
+
+function renderBell() {
+  const btn = $("bellBtn");
+  const armed = state.alertConfig.enabled && anyThreshold(state.alertConfig);
+  const n = state.alertTriggers.length;
+  btn.classList.toggle("on", armed);
+  $("bellDot").hidden = n === 0;
+  btn.title = n ? `${n} alerte${n > 1 ? "s" : ""} déclenchée${n > 1 ? "s" : ""}`
+    : armed ? "Alertes actives — régler les seuils" : "Régler les alertes de prix";
+}
+
+// ---------- alert popup ----------
+function showAlertPopup() {
+  const list = $("triggerList");
+  list.replaceChildren();
+  for (const t of state.alertTriggers) {
+    const row = el("div", "trigger");
+    row.append(logoEl(t.position));
+    const main = el("div", "tg-main");
+    main.append(el("div", "tg-name", t.position.name));
+    const bits = [t.label, `seuil ${pct(t.threshold, 1)}`, `cours ${price(t.position.priceEur)}`];
+    if (t.refPrice != null) bits.push(`réf. ${price(t.refPrice)}`);
+    bits.push(t.accountLabel);
+    main.append(el("div", "tg-sub", bits.join(" · ")));
+    row.append(main);
+    row.append(el("div", "tg-pct " + signCls(t.actualPct), pct(t.actualPct, 1)));
+    list.append(row);
+  }
+  const n = state.alertTriggers.length;
+  $("alertPopupTitle").textContent = n === 1 ? "1 alerte déclenchée" : `${n} alertes déclenchées`;
+  const dlg = $("alertPopup");
+  if (!dlg.open) dlg.showModal();
+}
+
+// Opens by itself only when the set of breached thresholds differs from the one the
+// user last dismissed, so the 60 s refresh never re-opens the same dialog, but a
+// genuinely new alert does.
+function maybeShowAlerts() {
+  const sig = triggerSignature(state.alertTriggers);
+  if (!sig || sig === state.alertSeen) return;
+  showAlertPopup();
+}
+
+// ---------- alert settings dialog ----------
+let pushInfo = null; // last /api/alerts payload: VAPID key, store durability, device count
+
+async function apiAlerts(body) {
+  const init = body
+    ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : undefined;
+  const r = await fetch("/api/alerts", init);
+  if (r.status === 401) { location.href = "/login.html"; throw new Error("authentification requise"); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+  return r.json();
+}
+
+function buildThresholdRows() {
+  const box = $("thresholds");
+  box.replaceChildren(el("div"), el("div", "th-head", "Hausse"), el("div", "th-head", "Baisse"));
+  for (const [label, upId, downId] of ALERT_GROUPS) {
+    box.append(el("div", "th-label", label));
+    for (const [id, sign] of [[upId, "+"], [downId, "−"]]) {
+      const cell = el("div", "th-cell");
+      cell.append(el("span", "th-sign", sign));
+      const input = el("input");
+      Object.assign(input, { type: "number", id: `thr_${id}`, min: "0", max: "10000", step: "0.5", placeholder: "—", inputMode: "decimal" });
+      input.setAttribute("aria-label", `${label}, ${sign === "+" ? "hausse" : "baisse"}, en pourcent`);
+      cell.append(input, el("span", "th-sign", "%"));
+      box.append(cell);
+    }
+  }
+}
+
+function fillSettingsForm() {
+  const c = state.alertConfig;
+  $("alertEnabled").checked = c.enabled;
+  $("alertHour").value = `${String(c.hour).padStart(2, "0")}:00`;
+  $("alertTz").textContent = `heure locale (${c.tz})`;
+  for (const r of ALERT_RULES) $(`thr_${r.id}`).value = c.thresholds[r.id] ?? "";
+}
+
+function readSettingsForm() {
+  const thresholds = {};
+  for (const r of ALERT_RULES) thresholds[r.id] = $(`thr_${r.id}`).value;
+  return normalizeAlertConfig({
+    enabled: $("alertEnabled").checked,
+    hour: Number(($("alertHour").value || "09:00").slice(0, 2)),
+    tz: BROWSER_TZ,
+    thresholds,
+  });
+}
+
+let swReg = null;
+async function ensureSW() {
+  if (!PUSH_SUPPORTED) return null;
+  if (!swReg) swReg = await navigator.serviceWorker.register("/sw.js").catch(() => null);
+  return swReg;
+}
+const urlB64ToBytes = (b64) => {
+  const raw = atob((b64 + "=".repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+};
+
+// Reports honestly which of the three prerequisites (browser support, VAPID keys,
+// durable store) is missing, because a silent "nothing happens" is impossible to debug.
+async function renderPushState() {
+  const label = $("pushState"), hint = $("pushHint"), btn = $("pushToggle");
+  btn.hidden = true;
+  label.classList.remove("on");
+  const setUp = (text, why) => { label.textContent = text; hint.textContent = why; };
+
+  if (!PUSH_SUPPORTED) {
+    return setUp("non supporté", "Ce navigateur ne gère pas les notifications push. Les alertes restent visibles à l’ouverture du tableau de bord.");
+  }
+  if (!pushInfo) return setUp("…", "Vérification de la configuration du serveur.");
+  if (!pushInfo.push.configured) {
+    return setUp("non configuré", "Le serveur n’a pas de clés VAPID : lancez « npm run vapid » et ajoutez VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY aux variables d’environnement.");
+  }
+  if (!pushInfo.push.durable) {
+    return setUp("stockage manquant", "Aucune base persistante connectée : la vérification programmée ne pourrait pas retrouver cet abonnement. Connectez une base Redis au projet.");
+  }
+  if (Notification.permission === "denied") {
+    return setUp("bloqué", "Les notifications sont bloquées pour ce site dans les réglages du navigateur. Réautorisez-les puis rouvrez cette fenêtre.");
+  }
+  const reg = await ensureSW();
+  const sub = reg ? await reg.pushManager.getSubscription() : null;
+  btn.hidden = false;
+  if (sub) {
+    label.textContent = "actives sur cet appareil";
+    label.classList.add("on");
+    hint.textContent = pushInfo.push.devices > 1
+      ? `${pushInfo.push.devices} appareils reçoivent les alertes.`
+      : "Cet appareil recevra les alertes même application fermée.";
+    btn.textContent = "Désactiver sur cet appareil";
+    btn.onclick = () => togglePush(false);
+  } else {
+    label.textContent = "inactives sur cet appareil";
+    hint.textContent = "Chaque appareil (téléphone, ordinateur) s’active séparément.";
+    btn.textContent = "Activer sur cet appareil";
+    btn.onclick = () => togglePush(true);
+  }
+}
+
+async function togglePush(on) {
+  const btn = $("pushToggle");
+  btn.disabled = true;
+  try {
+    const reg = await ensureSW();
+    if (!reg) throw new Error("service worker indisponible");
+    if (on) {
+      if (await Notification.requestPermission() !== "granted") { await renderPushState(); return; }
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToBytes(pushInfo.push.publicKey),
+      });
+      // only the endpoint travels: payload-less pushes need no encryption keys
+      pushInfo = await apiAlerts({ action: "subscribe", subscription: { endpoint: sub.endpoint }, config: state.alertConfig });
+    } else {
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await apiAlerts({ action: "unsubscribe", endpoint: sub.endpoint }).then((r) => { pushInfo = r; }).catch(() => {});
+        await sub.unsubscribe();
+      }
+    }
+  } catch (e) {
+    $("pushHint").textContent = `Échec : ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    await renderPushState();
+  }
+}
+
+async function openAlertSettings() {
+  fillSettingsForm();
+  $("alertSettings").showModal();
+  renderPushState();                         // paints the "…" state immediately
+  try { pushInfo = await apiAlerts(); } catch { pushInfo = null; }
+  await renderPushState();
+}
+
 // ---------- load & refresh ----------
 function renderAll() {
   renderHero();
@@ -1126,6 +1380,8 @@ function renderAll() {
   renderRanges();
   renderChartSection();
   renderSections();
+  recomputeAlerts();
+  renderBell();
   $("updated").textContent = `Actualisé à ${new Date().toLocaleTimeString("fr-FR")}`;
 }
 
@@ -1154,6 +1410,7 @@ async function refresh(soft) {
     state.perf = perf;
     $("loading").hidden = true;
     renderAll();
+    maybeShowAlerts();
   } catch (e) {
     if (!state.dashboard) showError(e);
     else console.warn("refresh:", e);
@@ -1172,6 +1429,50 @@ new ResizeObserver(() => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => { if (state.perf) renderChart(); }, 120);
 }).observe($("chartWrap"));
+
+// ---------- alerts wiring ----------
+state.alertConfig = loadAlertConfig();
+buildThresholdRows();
+$("bellBtn").addEventListener("click", openAlertSettings);
+
+$("alertForm").addEventListener("submit", async (e) => {
+  if (e.submitter?.value !== "save") return; // method="dialog" closes on Annuler too
+  const cfg = readSettingsForm();
+  state.alertConfig = cfg;
+  localStorage.setItem("alertConfig", JSON.stringify(cfg));
+  recomputeAlerts();
+  renderBell();
+  state.alertSeen = "";  // new thresholds deserve a fresh look at what they catch
+  maybeShowAlerts();
+  try { await apiAlerts({ action: "save", config: cfg }); }
+  catch (err) { console.warn("alertes:", err.message); }
+});
+
+// one dismissal path for the button, the ✕, Escape and the backdrop alike
+$("alertPopup").addEventListener("close", () => {
+  state.alertSeen = triggerSignature(state.alertTriggers);
+  localStorage.setItem("alertSeen", state.alertSeen);
+});
+$("alertPopupClose").addEventListener("click", () => $("alertPopup").close());
+$("alertPopupX").addEventListener("click", () => $("alertPopup").close());
+$("alertPopupSettings").addEventListener("click", () => { $("alertPopup").close(); openAlertSettings(); });
+
+if (PUSH_SUPPORTED) {
+  // registered on every load, not only when the dialog opens: a device that subscribed
+  // earlier needs its push handler back as soon as the page runs
+  ensureSW();
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    if (e.data?.type !== "show-alerts") return; // sent by sw.js on notification click
+    state.alertSeen = "";
+    if (state.alertTriggers.length) showAlertPopup();
+    else refresh(true);
+  });
+}
+// arriving from a notification: show the dialog even if this set was dismissed before
+if (new URLSearchParams(location.search).has("alert")) {
+  state.alertSeen = "";
+  history.replaceState(null, "", location.pathname);
+}
 
 renderRanges();
 refresh(false);

@@ -14,6 +14,9 @@ n'est stocké côté serveur.
 - Détail par position : PRU, performance, dernier achat, dernière vente, performance
   propre du titre sur 6 périodes avec mini-graphique
 - Section Archives : positions entièrement soldées, classées par compte d'origine
+- **Alertes de prix** : six seuils (au-dessus / en dessous du PRU, du dernier achat,
+  de la dernière vente), une vérification par jour à l'heure de votre choix, fenêtre
+  récapitulative dans l'app et notification push optionnelle sur téléphone et ordinateur
 - PWA installable sur téléphone, mode clair/sombre, protégé par mot de passe
 - Zéro dépendance npm (Node pur), déployable gratuitement sur Vercel
 
@@ -58,6 +61,53 @@ déterminent les sections affichées ; il n'y a rien d'autre à configurer.
 
 **Ne déployez jamais sans `DASHBOARD_PASSWORD`** : l'URL serait publique et votre
 portefeuille visible par quiconque la trouve.
+
+## Alertes de prix
+
+L'icône cloche, en haut du tableau de bord, ouvre les réglages : activez les alertes,
+choisissez l'heure de la vérification quotidienne, puis renseignez les seuils voulus
+(laisser une case vide désactive cette alerte). Les six seuils sont indépendants :
+hausse et baisse, par rapport au PRU, au dernier prix d'achat et au dernier prix de vente.
+
+**Sans aucune configuration**, la fenêtre récapitulative s'ouvre à l'ouverture du
+tableau de bord dès qu'au moins un seuil est franchi, en indiquant les titres
+concernés, la situation et le pourcentage réel relevé.
+
+Pour recevoir en plus une **notification push** quand l'app est fermée, il faut deux
+choses (gratuites toutes les deux) :
+
+1. **Des clés VAPID**, qui identifient votre déploiement auprès des navigateurs :
+   ```
+   npm run vapid
+   ```
+   Ajoutez `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` et `VAPID_SUBJECT` aux variables
+   d'environnement du projet Vercel, puis redéployez.
+2. **Une base persistante**, pour que la vérification programmée retrouve les appareils
+   abonnés : dans le projet Vercel, onglet **Storage**, connectez une base **Redis**
+   (Upstash, offre gratuite). Vercel injecte alors `KV_REST_API_URL` et
+   `KV_REST_API_TOKEN` tout seul, il n'y a rien d'autre à écrire.
+
+Ajoutez enfin `CRON_SECRET` (une chaîne aléatoire de 16 caractères ou plus) : Vercel
+l'envoie automatiquement à la tâche programmée et le dashboard refuse les appels qui
+ne le portent pas. Cliquez ensuite sur **Activer sur cet appareil** dans les réglages,
+sur chaque appareil voulu — téléphone et ordinateur s'abonnent séparément.
+
+Détails utiles :
+
+- Les notifications marchent sur Chrome, Edge et Firefox (Windows, macOS, Linux),
+  sur Safari macOS 13+, sur Android, et sur iPhone **à condition que la PWA soit
+  installée sur l'écran d'accueil** (iOS 16.4+). Sur ordinateur, le navigateur doit
+  tourner, même fenêtre fermée ; sinon la notification est délivrée à son redémarrage.
+- Une position qui reste au-dessus de son seuil **ne notifie qu'une fois** : seuls les
+  seuils nouvellement franchis déclenchent un envoi. Un seuil qui cesse d'être franchi
+  se réarme automatiquement.
+- Le plan Vercel Hobby limite chaque expression cron à une exécution par jour, mais
+  autorise 100 entrées : `vercel.json` en déclare donc une par heure UTC vers la même
+  route, et le code décide si l'heure choisie est arrivée dans votre fuseau. L'heure
+  est respectée à l'heure près (Vercel se réserve les 59 minutes suivantes).
+- Le push ne transporte aucune donnée : il ne fait que réveiller le service worker,
+  qui vient chercher lui-même les chiffres sur votre serveur. Les cours et les montants
+  ne transitent jamais par les serveurs de notification de Google ou d'Apple.
 
 ## Recevoir les mises à jour
 
@@ -141,5 +191,10 @@ lib/ledger.mjs    moteur de positions (rejeu de l'historique)
 lib/portfolio.mjs valorisation EUR, TWR, séries intraday
 lib/yahoo.mjs     résolution ISIN, cours, taux de change (cache disque)
 lib/auth.mjs      mot de passe optionnel (cookie HMAC signé)
+lib/alerts.mjs    règles de seuils (miroir de la table dans public/app.js)
+lib/alerts-service.mjs  vérification quotidienne : heure locale, anti-doublon, envoi
+lib/store.mjs     état des alertes (Redis REST, fichier local, ou mémoire)
+lib/push.mjs      Web Push signé VAPID, sans dépendance (node:crypto)
+public/sw.js      service worker : transforme un push en notification
 public/           frontend vanilla (graphique SVG fait main, PWA)
 ```

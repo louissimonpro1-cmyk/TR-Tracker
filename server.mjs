@@ -10,6 +10,8 @@ import { fileURLToPath } from "node:url";
 import { getDashboard, getPerf, getLogo, getAssetSeries, PERF_RANGES } from "./lib/service.mjs";
 import { AUTH_ENABLED, isAuthedCookie, handleLogin, clearCookie } from "./lib/auth.mjs";
 import { parsePerfParams } from "./lib/http.mjs";
+import { handleAlerts } from "./lib/alerts-http.mjs";
+import { runCheck } from "./lib/alerts-service.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(ROOT, "public");
@@ -27,8 +29,10 @@ const MIME = {
 };
 
 // paths reachable without login (static shell, login flow, PWA assets)
+// /sw.js holds no data of its own and must stay fetchable for the browser to refresh
+// its registration, including while a session cookie has expired
 const PUBLIC_PATHS = new Set([
-  "/login.html", "/style.css", "/manifest.webmanifest",
+  "/login.html", "/style.css", "/manifest.webmanifest", "/sw.js",
   "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/api/login",
 ]);
 
@@ -59,6 +63,10 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(302, { Location: "/login.html" });
       return res.end();
     }
+
+    if (url.pathname === "/api/alerts") return handleAlerts(req, res, readJsonBody);
+    // locally there is no scheduler: this is the manual trigger used to test the check
+    if (url.pathname === "/api/cron/check-alerts") return json(res, 200, await runCheck());
 
     if (url.pathname === "/api/dashboard") return json(res, 200, await getDashboard());
     if (url.pathname === "/api/perf") {

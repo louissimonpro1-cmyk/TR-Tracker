@@ -66,9 +66,9 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, await getPerf(range));
     }
     if (url.pathname === "/api/asset-perf") {
-      const isin = url.searchParams.get("isin") || "";
-      if (!/^[A-Z0-9]{12}$/.test(isin)) return json(res, 400, { error: "isin invalide" });
-      return json(res, 200, await getAssetSeries(isin));
+      const key = url.searchParams.get("key") || "";
+      if (!/^[A-Z0-9_]{1,20}\|[A-Za-z0-9.\-]{1,20}$/.test(key)) return json(res, 400, { error: "clé invalide" });
+      return json(res, 200, await getAssetSeries(key));
     }
     const logo = url.pathname.match(/^\/api\/logo\/([A-Z0-9]{12})$/);
     if (logo) {

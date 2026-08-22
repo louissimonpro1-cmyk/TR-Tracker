@@ -12,6 +12,8 @@ const state = {
   showOwnPerf: localStorage.getItem("showOwnPerf") === "1",
   posSort: loadSort("posSort", { key: "valueEur", dir: "desc" }),
   arcSort: loadSort("arcSort", { key: "lastOpDate", dir: "desc" }),
+  openCards: new Set(),    // asset keys whose mobile card is expanded
+  openPerfFolds: new Set(), // asset keys whose mini-chart is expanded
 };
 const RANGES = [["1d", "1 J"], ["1w", "1 S"], ["1m", "1 M"], ["6m", "6 M"], ["1y", "1 A"], ["3y", "3 A"], ["max", "Tout"]];
 const RANGE_LABEL = {
@@ -24,6 +26,9 @@ const _eur = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR"
 const _eurS = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", signDisplay: "always" });
 const _eur3 = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", minimumFractionDigits: 3, maximumFractionDigits: 3 });
 const _eur3S = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", minimumFractionDigits: 3, maximumFractionDigits: 3, signDisplay: "always" });
+// sub-euro assets (small-cap tokens) need more decimals to say anything at all
+const _eur5 = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", minimumFractionDigits: 5, maximumFractionDigits: 5 });
+const _eur5S = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", minimumFractionDigits: 5, maximumFractionDigits: 5, signDisplay: "always" });
 const _qty = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 4 });
 const _num = (dec, signed) => new Intl.NumberFormat("fr-FR", {
   minimumFractionDigits: dec, maximumFractionDigits: dec, signDisplay: signed ? "always" : "auto",
@@ -32,8 +37,8 @@ const _pct2 = _num(2, true), _pct1 = _num(1, true);
 
 const eur = (x) => (x == null ? "—" : _eur.format(x));
 const eurS = (x) => (x == null ? "—" : _eurS.format(x));
-const price = (x) => (x == null ? "—" : Math.abs(x) < 10 ? _eur3.format(x) : _eur.format(x));
-const priceS = (x) => (x == null ? "—" : Math.abs(x) < 10 ? _eur3S.format(x) : _eurS.format(x));
+const price = (x) => (x == null ? "—" : Math.abs(x) < 0.5 ? _eur5.format(x) : Math.abs(x) < 10 ? _eur3.format(x) : _eur.format(x));
+const priceS = (x) => (x == null ? "—" : Math.abs(x) < 0.5 ? _eur5S.format(x) : Math.abs(x) < 10 ? _eur3S.format(x) : _eurS.format(x));
 const qty = (x) => (x == null ? "—" : _qty.format(x));
 const pct = (x, dec = 2) => (x == null ? "—" : (dec === 1 ? _pct1 : _pct2).format(x) + " %");
 
@@ -313,14 +318,17 @@ function renderChartTable() {
 }
 
 // ---------- tables ----------
+// Trade Republic's logo CDN is keyed by ISIN and has nothing for crypto tickers,
+// so crypto goes straight to the lettered avatar (its ticker reads better anyway)
+function fallbackAvatar(a) {
+  return el("div", "logo-fallback c" + (hash(a.isin) % 8), a.isCrypto ? a.isin.slice(0, 4) : initials(a.name));
+}
 function logoEl(a) {
+  if (a.isCrypto) return fallbackAvatar(a);
   const img = el("img", "logo");
   img.alt = "";
   img.src = `/api/logo/${a.isin}?theme=${darkMode() ? "dark" : "light"}`;
-  img.onerror = () => {
-    const fb = el("div", "logo-fallback c" + (hash(a.isin) % 8), initials(a.name));
-    img.replaceWith(fb);
-  };
+  img.onerror = () => img.replaceWith(fallbackAvatar(a));
   return img;
 }
 
@@ -375,16 +383,31 @@ function tdPrice(value, raw, cls) {
 }
 
 // aggregate shown on the right of a section header (visible even when collapsed)
-function sectionSummary(id, eurValue, pctValue, title) {
-  const box = $(id);
-  if (!box) return;
-  box.replaceChildren();
-  if (eurValue == null) { box.hidden = true; return; }
-  box.hidden = false;
+function sectionSumEl(eurValue, pctValue, title) {
+  const box = el("span", "section-sum " + signCls(eurValue));
+  if (eurValue == null) return box;
   box.title = title;
-  box.className = "section-sum " + signCls(eurValue);
   box.append(el("span", "ss-eur", eurS(eurValue)));
   if (pctValue != null) box.append(el("span", "ss-pct", pct(pctValue, 1)));
+  return box;
+}
+
+// a collapsible card section whose open/closed state survives re-renders
+function foldSection(id, titleText, countText, summaryEl, defaultOpen) {
+  const section = el("section", "card");
+  const fold = el("details", "section-fold");
+  const storeKey = `fold_${id}`;
+  const saved = localStorage.getItem(storeKey);
+  fold.open = saved == null ? defaultOpen : saved === "1";
+  fold.addEventListener("toggle", () => localStorage.setItem(storeKey, fold.open ? "1" : "0"));
+  const sum = el("summary");
+  const h2 = el("h2", null, titleText + " ");
+  h2.append(el("span", "count", countText));
+  sum.append(h2);
+  if (summaryEl) sum.append(summaryEl);
+  fold.append(sum);
+  section.append(fold);
+  return { section, fold };
 }
 
 // ---------- sorting ----------
@@ -413,15 +436,10 @@ function makeSorter(stateKey, storageKey, rerender) {
   };
 }
 
-const sortPositions = makeSorter("posSort", "posSort", () => renderPositions());
+const sortPositions = makeSorter("posSort", "posSort", () => renderSections());
 const shortDate = (d) => (d ? fmtDate.format(new Date(d + "T12:00:00Z")) : "—");
 
-function renderPositions() {
-  const list = sortList(state.dashboard.positions, state.posSort);
-  $("posCount").textContent = `(${list.length})`;
-  const tot = state.dashboard.totals;
-  sectionSummary("posSummary", tot.unrealized, tot.unrealizedPct, "P&L latent des positions ouvertes");
-  const table = $("posTable");
+function renderPositionTable(table, list) {
   table.replaceChildren();
 
   const expanded = state.showOwnPerf;
@@ -441,7 +459,7 @@ function renderPositions() {
   toggleBtn.addEventListener("click", () => {
     state.showOwnPerf = !state.showOwnPerf;
     localStorage.setItem("showOwnPerf", state.showOwnPerf ? "1" : "0");
-    renderPositions();
+    renderSections();
   });
   perfTh.append(toggleBtn);
   r1.append(perfTh);
@@ -490,20 +508,12 @@ function renderPositions() {
     tbody.append(row);
   }
   table.append(tbody);
-  renderPositionCards(list);
-  $("positionsCard").hidden = false;
 }
 
-const sortArchives = makeSorter("arcSort", "arcSort", () => renderArchives());
+const sortArchives = makeSorter("arcSort", "arcSort", () => renderSections());
 
-function renderArchives() {
-  const list = sortList(state.dashboard.archives, state.arcSort);
-  $("arcCount").textContent = `(${list.length})`;
-  const tot = state.dashboard.totals;
-  sectionSummary("arcSummary", tot.archivesRealized, tot.archivesRealizedPct, "P&L réalisé sur les positions soldées");
-  const table = $("arcTable");
+function renderArchiveTable(table, list) {
   table.replaceChildren();
-
   const sort = state.arcSort, onSort = sortArchives;
   const thead = el("thead");
   const r1 = el("tr");
@@ -527,15 +537,13 @@ function renderArchives() {
     row.append(tdNum(pct(a.perfPct), signCls(a.perfPct)));
     row.append(tdNum(eurS(a.perfEur), signCls(a.perfEur)));
     row.append(tdNum(shortDate(a.lastOpDate)));
-    row.append(tdNum(price(a.lastSellPrice)));
+    row.append(tdPrice(a.lastSellPrice, a.lastSellRaw));
     row.append(tdNum(price(a.currentPrice), "sep" + (a.currentPrice == null ? " na" : "")));
     row.append(tdNum(pct(a.vsLastSellPct), signCls(a.vsLastSellPct)));
     row.append(tdNum(priceS(a.vsLastSellEur), signCls(a.vsLastSellEur)));
     tbody.append(row);
   }
   table.append(tbody);
-  renderArchiveCards(list);
-  $("archivesCard").hidden = false;
 }
 
 // ---------- mobile cards (replace the tables under 680px, via CSS) ----------
@@ -564,15 +572,15 @@ function miniPerfRow(o) {
 }
 
 // ---------- per-asset mini performance chart --------------------------------
-const assetSeriesMem = new Map(); // isin -> promise of /api/asset-perf payload
-function fetchAssetSeries(isin) {
-  if (!assetSeriesMem.has(isin)) {
-    assetSeriesMem.set(isin, api(`/api/asset-perf?isin=${isin}`).catch((e) => {
-      assetSeriesMem.delete(isin);
+const assetSeriesMem = new Map(); // asset key -> promise of /api/asset-perf payload
+function fetchAssetSeries(key) {
+  if (!assetSeriesMem.has(key)) {
+    assetSeriesMem.set(key, api(`/api/asset-perf?key=${encodeURIComponent(key)}`).catch((e) => {
+      assetSeriesMem.delete(key);
       throw e;
     }));
   }
-  return assetSeriesMem.get(isin);
+  return assetSeriesMem.get(key);
 }
 
 const ASSET_RANGE_DAYS = { y3: 3 * 365, y1: 365, m6: 182, m1: 30, w1: 7 };
@@ -748,18 +756,22 @@ function assetPerfFold(p) {
   for (const [k, b] of buttons) {
     b.addEventListener("click", () => { selected = k; render(); });
   }
-  fold.addEventListener("toggle", async () => {
-    if (!fold.open) return;
+  const load = async () => {
     if (data) { render(); return; }
     note.textContent = "Chargement de la courbe…";
     note.hidden = false;
     try {
-      data = await fetchAssetSeries(p.isin);
+      data = await fetchAssetSeries(p.key);
       render();
     } catch {
       note.textContent = "Courbe indisponible.";
     }
+  };
+  fold.addEventListener("toggle", () => {
+    if (fold.open) { state.openPerfFolds.add(p.key); load(); }
+    else state.openPerfFolds.delete(p.key);
   });
+  if (state.openPerfFolds.has(p.key)) { fold.open = true; load(); } // survives refreshes
   return fold;
 }
 
@@ -775,9 +787,15 @@ function cardHead(a, rightText, rightCls, dayPct) {
   return head;
 }
 
-// collapsible card: summary = head + sub (always visible), body = detail grid + perf
-function makeCard(headEl, subEl, bodyChildren) {
+// collapsible card: summary = head + sub (always visible), body = detail grid + perf.
+// Open cards are remembered for the session so the 60 s refresh never closes them.
+function makeCard(cardKey, headEl, subEl, bodyChildren) {
   const card = el("details", "pcard");
+  card.open = state.openCards.has(cardKey);
+  card.addEventListener("toggle", () => {
+    if (card.open) state.openCards.add(cardKey);
+    else state.openCards.delete(cardKey);
+  });
   const sum = el("summary", "pcard-summary");
   sum.append(headEl, subEl);
   card.append(sum);
@@ -787,8 +805,7 @@ function makeCard(headEl, subEl, bodyChildren) {
   return card;
 }
 
-function renderPositionCards(list) {
-  const box = $("posCards");
+function renderPositionCards(box, list) {
   box.replaceChildren();
   for (const p of list) {
     const sub = el("div", "pcard-sub");
@@ -814,12 +831,11 @@ function renderPositionCards(list) {
     realized.append(el("span", "pr-label", "P&L réalisé sur ventes"));
     realized.append(el("span", "pr-value " + (sold ? signCls(p.realized) : "na"), sold ? eurS(p.realized) : "—"));
 
-    box.append(makeCard(cardHead(p, eur(p.valueEur), null, p.ownPerf?.d1), sub, [grid, realized, assetPerfFold(p)]));
+    box.append(makeCard(p.key, cardHead(p, eur(p.valueEur), null, p.ownPerf?.d1), sub, [grid, realized, assetPerfFold(p)]));
   }
 }
 
-function renderArchiveCards(list) {
-  const box = $("arcCards");
+function renderArchiveCards(box, list) {
   box.replaceChildren();
   for (const a of list) {
     const sub = el("div", "pcard-sub");
@@ -833,8 +849,89 @@ function renderArchiveCards(list) {
     grid.append(kv("Depuis la vente",
       a.currentPrice == null ? "—" : `${pct(a.vsLastSellPct)}\n${priceS(a.vsLastSellEur)}`,
       a.currentPrice == null ? null : signCls(a.vsLastSellPct), "kv-r"));
-    box.append(makeCard(cardHead(a, eurS(a.perfEur), signCls(a.perfEur)), sub, [grid]));
+    box.append(makeCard(a.key, cardHead(a, eurS(a.perfEur), signCls(a.perfEur)), sub, [grid]));
   }
+}
+
+// ---------- sections (one card per account, plus Archives) ----------
+function accountBody(fold, positions) {
+  const meta = el("div", "acct-meta");
+  fold.append(meta);
+  const scroll = el("div", "scroll-x");
+  const table = el("table", "data-table");
+  scroll.append(table);
+  fold.append(scroll);
+  const cards = el("div", "cards-list");
+  fold.append(cards);
+  renderPositionTable(table, positions);
+  renderPositionCards(cards, positions);
+  return meta;
+}
+
+function renderSections() {
+  const host = $("sections");
+  host.replaceChildren();
+  const dash = state.dashboard;
+  if (!dash) return;
+
+  for (const acc of dash.accounts) {
+    const list = sortList(acc.positions, state.posSort);
+    const { section, fold } = foldSection(
+      acc.id, acc.label, `(${list.length})`,
+      sectionSumEl(acc.unrealized, acc.unrealizedPct, `P&L latent du compte ${acc.label}`),
+      true,
+    );
+    const meta = accountBody(fold, list);
+    const parts = [["Valeur", eur(acc.positionsValue)]];
+    if (acc.cash != null) parts.push(["Espèces", eur(acc.cash)]);
+    if (acc.dayChangePct != null) parts.push(["Jour", `${eurS(acc.dayChangeEur)} · ${pct(acc.dayChangePct)}`, signCls(acc.dayChangeEur)]);
+    parts.push(["P&L réalisé", eurS(acc.realized), signCls(acc.realized)]);
+    for (const [label, value, cls] of parts) {
+      const item = el("span", "acct-item");
+      item.append(el("span", "acct-l", label));
+      item.append(el("span", "acct-v" + (cls ? " " + cls : ""), value));
+      meta.append(item);
+    }
+    host.append(section);
+  }
+
+  const groups = dash.archives;
+  if (!groups.length) return;
+  const totalItems = groups.reduce((n, g) => n + g.items.length, 0);
+  const totalRealized = groups.reduce((s, g) => s + g.realized, 0);
+  const { section, fold } = foldSection(
+    "ARCHIVES", "Archives", `(${totalItems})`,
+    sectionSumEl(Math.round(totalRealized * 100) / 100, dash.totals.archivesRealizedPct, "P&L réalisé sur les positions soldées"),
+    false,
+  );
+  fold.append(el("p", "hint", "Positions entièrement soldées, classées par compte d’origine."));
+  // a single group needs no sub-fold: the section itself is the group
+  const single = groups.length === 1;
+  for (const g of groups) {
+    const list = sortList(g.items, state.arcSort);
+    let target = fold;
+    if (!single) {
+      const sub = el("details", "sub-fold");
+      sub.open = localStorage.getItem(`fold_ARC_${g.id}`) !== "0";
+      sub.addEventListener("toggle", () => localStorage.setItem(`fold_ARC_${g.id}`, sub.open ? "1" : "0"));
+      const s = el("summary");
+      s.append(el("span", "sub-title", g.label));
+      s.append(el("span", "count", `(${list.length})`));
+      s.append(sectionSumEl(g.realized, g.realizedPct, `P&L réalisé sur le compte ${g.label}`));
+      sub.append(s);
+      fold.append(sub);
+      target = sub;
+    }
+    const scroll = el("div", "scroll-x");
+    const table = el("table", "data-table");
+    scroll.append(table);
+    target.append(scroll);
+    const cards = el("div", "cards-list");
+    target.append(cards);
+    renderArchiveTable(table, list);
+    renderArchiveCards(cards, list);
+  }
+  host.append(section);
 }
 
 // ---------- ranges ----------
@@ -869,8 +966,7 @@ async function setRange(range) {
 function renderAll() {
   renderHero();
   renderChartSection();
-  renderPositions();
-  renderArchives();
+  renderSections();
   $("updated").textContent = `Actualisé à ${new Date().toLocaleTimeString("fr-FR")}`;
 }
 
@@ -917,14 +1013,6 @@ new ResizeObserver(() => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => { if (state.perf) renderChart(); }, 120);
 }).observe($("chartWrap"));
-
-// collapsible sections: Positions open / Archives closed by default, choice remembered
-for (const [id, key, defaultOpen] of [["posFold", "foldPositions", true], ["arcFold", "foldArchives", false]]) {
-  const fold = $(id);
-  const saved = localStorage.getItem(key);
-  fold.open = saved == null ? defaultOpen : saved === "1";
-  fold.addEventListener("toggle", () => localStorage.setItem(key, fold.open ? "1" : "0"));
-}
 
 renderRanges();
 refresh(false);

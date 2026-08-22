@@ -7,8 +7,11 @@ n'est stocké côté serveur.
 
 - Graphique de performance (TWR) avec périodes 1 J / 1 S / 1 M / 6 M / 1 A / 3 A / Tout
 - Valeur temps réel des positions, espèces, P&L latent et réalisé, dividendes, frais
-- Détail par position : PRU, performance, dernière vente, performance propre du titre
-- Section Archives : bilan des positions entièrement soldées
+- **Une section par compte** : PEA, CTO, Cryptos — affichées uniquement si le compte
+  existe et contient au moins une position ouverte
+- Détail par position : PRU, performance, dernier achat, dernière vente, performance
+  propre du titre sur 6 périodes avec mini-graphique
+- Section Archives : positions entièrement soldées, classées par compte d'origine
 - PWA installable sur téléphone, mode clair/sombre, protégé par mot de passe
 - Zéro dépendance npm (Node pur), déployable gratuitement sur Vercel
 
@@ -25,6 +28,10 @@ shares, price, amount, fee, tax, currency, ...
 Le sheet doit être partagé en **« Tous les utilisateurs disposant du lien »**
 (lecture seule). Le lien de partage sert de configuration : personne d'autre ne le
 connaît, ne le publiez nulle part.
+
+Les colonnes `account_type` (DEFAULT, PEA…) et `asset_class` (STOCK, FUND, CRYPTO…)
+déterminent les sections affichées ; il n'y a rien à configurer. Pour essayer sans
+publier de sheet, `SHEET_URL` accepte aussi le chemin d'un fichier `.csv` local.
 
 ## Déployer votre instance (gratuit, ~10 min)
 
@@ -65,8 +72,18 @@ l'accès local est direct (pas de page de connexion). Le premier chargement pren
   `fee`/`tax` sont des colonnes séparées (cash = amount + fee + tax). Les splits,
   dividendes en actions et actions gratuites entrent à coût nul, ce qui ajuste le PRU
   naturellement. Les frais d'ordre ne sont pas inclus dans le PRU.
+- **Comptes** : `account_type` sépare les comptes (DEFAULT = CTO, PEA…), et les
+  cryptos (`asset_class = CRYPTO`) forment leur propre section même si elles vivent
+  dans le compte titres. Un compte inconnu de ce code obtient quand même sa section,
+  sous son nom brut. Les espèces sont suivies par compte ; les cryptos n'ont pas de
+  poche d'espèces propre (elles sont achetées avec celle du compte titres), et les
+  transferts internes entre comptes ne comptent pas comme des versements.
+- **Cryptos** : cotées par ticker (`BTC`, `ETH`) et non par ISIN ; Yahoo les fournit
+  directement en EUR (`BTC-EUR`), sans conversion de change, et elles cotent 24h/24
+  (elles ne servent donc jamais de référence pour la séance des marchés actions).
 - **Résidus** : une position dont il reste moins de 0,04 part est considérée soldée
-  et passe en Archives.
+  et passe en Archives. Pour les cryptos, divisibles à l'infini, le seuil descend à
+  0,000001 unité — 0,04 bitcoin représenterait des milliers d'euros.
 - **Performance du portefeuille** : Time-Weighted Return quotidien
   (`r = V_jour / (V_veille + flux du jour) − 1`, chaîné depuis le début de la période).
   Les dépôts/retraits et les achats/ventes ne déforment donc pas la courbe. Les

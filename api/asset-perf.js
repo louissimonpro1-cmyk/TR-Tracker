@@ -3,10 +3,10 @@ import { guard, sendJson } from "../lib/http.mjs";
 
 export default async function handler(req, res) {
   if (!guard(req, res)) return;
-  const isin = String(req.query?.isin || "");
-  if (!/^[A-Z0-9]{12}$/.test(isin)) return sendJson(res, 400, { error: "isin invalide" });
+  const key = String(req.query?.key || "");
+  if (!/^[A-Z0-9_]{1,20}\|[A-Za-z0-9.\-]{1,20}$/.test(key)) return sendJson(res, 400, { error: "clé invalide" });
   try {
-    sendJson(res, 200, await getAssetSeries(isin));
+    sendJson(res, 200, await getAssetSeries(key));
   } catch (e) {
     sendJson(res, e.status || 500, { error: e.message });
   }

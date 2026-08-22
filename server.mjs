@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDashboard, getPerf, getLogo, getAssetSeries, PERF_RANGES } from "./lib/service.mjs";
 import { AUTH_ENABLED, isAuthedCookie, handleLogin, clearCookie } from "./lib/auth.mjs";
+import { parsePerfParams } from "./lib/http.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(ROOT, "public");
@@ -61,9 +62,9 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname === "/api/dashboard") return json(res, 200, await getDashboard());
     if (url.pathname === "/api/perf") {
-      const range = url.searchParams.get("range") || "max";
+      const { range, opts } = parsePerfParams((name) => url.searchParams.get(name));
       if (!PERF_RANGES.includes(range)) return json(res, 400, { error: "range invalide" });
-      return json(res, 200, await getPerf(range));
+      return json(res, 200, await getPerf(range, opts));
     }
     if (url.pathname === "/api/asset-perf") {
       const key = url.searchParams.get("key") || "";

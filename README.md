@@ -5,7 +5,9 @@ portefeuille en temps réel, positions ouvertes, historique des positions soldé
 L'historique des transactions est lu **en direct** depuis un Google Sheet — rien
 n'est stocké côté serveur.
 
-- Graphique de performance (TWR) avec périodes 1 J / 1 S / 1 M / 6 M / 1 A / 3 A / Tout
+- Graphique de performance (TWR) avec périodes 1 J / 1 S / 1 M / 6 M / 1 A / 3 A / Tout,
+  filtrable par compte (tous / un seul / plusieurs) et plage de dates personnalisée ;
+  une période sans assez d'historique pour le compte sélectionné n'est pas proposée
 - Valeur temps réel des positions, espèces, P&L latent et réalisé, dividendes, frais
 - **Une section par compte** : PEA, CTO, Cryptos — affichées uniquement si le compte
   existe et contient au moins une position ouverte
@@ -88,6 +90,12 @@ l'accès local est direct (pas de page de connexion). Le premier chargement pren
   (`r = V_jour / (V_veille + flux du jour) − 1`, chaîné depuis le début de la période).
   Les dépôts/retraits et les achats/ventes ne déforment donc pas la courbe. Les
   dividendes en espèces comptent comme un flux sortant des positions.
+- **Filtre de comptes et plage personnalisée** : sélectionner un ou plusieurs comptes
+  recalcule la courbe (et ses flux) sur ce sous-ensemble uniquement, avec pour départ
+  la première activité du compte le plus ancien retenu — jamais celle du portefeuille
+  entier. Les boutons de période (1 S, 1 M…) n'apparaissent que si l'historique de la
+  sélection remonte assez loin ; la plage personnalisée est bornée de la même façon
+  (impossible de remonter avant le début d'activité du compte sélectionné).
 - **Prix historiques réels** : Yahoo fournit des séries ajustées rétroactivement des
   splits/attributions. Comme le registre contient les quantités réellement détenues,
   les prix réels sont reconstruits en multipliant la série ajustée par les ratios des

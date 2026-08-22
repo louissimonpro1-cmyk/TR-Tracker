@@ -39,6 +39,7 @@
   </section>
 
   <section class="card chart-card" id="chartCard" hidden>
+    <div class="acct-filter" id="acctFilter" hidden></div>
     <div class="chart-head">
       <div class="period-perf">
         <span id="periodPct"></span>
@@ -46,6 +47,11 @@
       </div>
       <div class="ranges" id="ranges" role="tablist" aria-label="Période"></div>
     </div>
+    <form class="custom-range" id="customRange" hidden>
+      <label>Du <input type="date" id="customFrom" required></label>
+      <label>au <input type="date" id="customTo" required></label>
+      <button type="submit">Afficher</button>
+    </form>
     <div class="chart-wrap" id="chartWrap">
       <svg id="chartSvg" role="img" aria-label="Performance du portefeuille"></svg>
       <div class="tooltip" id="tooltip" hidden></div>

@@ -7,6 +7,12 @@ const loadSort = (key, fallback) => {
     return s && typeof s.key === "string" ? s : fallback;
   } catch { return fallback; }
 };
+function loadAccountFilter() {
+  try {
+    const arr = JSON.parse(localStorage.getItem("acctFilter"));
+    return Array.isArray(arr) && arr.length ? new Set(arr) : null;
+  } catch { return null; }
+}
 const state = {
   range: "max", dashboard: null, perf: null,
   showOwnPerf: localStorage.getItem("showOwnPerf") === "1",
@@ -14,12 +20,38 @@ const state = {
   arcSort: loadSort("arcSort", { key: "lastOpDate", dir: "desc" }),
   openCards: new Set(),    // asset keys whose mobile card is expanded
   openPerfFolds: new Set(), // asset keys whose mini-chart is expanded
+  accountFilter: loadAccountFilter(), // Set<accountId>|null — null means "every account"
+  customFrom: localStorage.getItem("customFrom") || "",
+  customTo: localStorage.getItem("customTo") || "",
 };
 const RANGES = [["1d", "1 J"], ["1w", "1 S"], ["1m", "1 M"], ["6m", "6 M"], ["1y", "1 A"], ["3y", "3 A"], ["max", "Tout"]];
+const RANGE_MONTHS = { "3y": 36, "1y": 12, "6m": 6, "1m": 1 };
 const RANGE_LABEL = {
   max: "depuis l’ouverture", "3y": "sur 3 ans", "1y": "sur 1 an",
   "6m": "sur 6 mois", "1m": "sur 1 mois", "1w": "sur 1 semaine", "1d": "aujourd’hui",
 };
+
+// earliest activity date for the accounts currently selected (null selection = all)
+function selectionFirstDate() {
+  const dash = state.dashboard;
+  if (!dash) return null;
+  if (!state.accountFilter) return dash.totals.firstDate;
+  let earliest = null;
+  for (const a of dash.accounts) {
+    if (state.accountFilter.has(a.id) && a.firstDate && (!earliest || a.firstDate < earliest)) earliest = a.firstDate;
+  }
+  return earliest || dash.totals.firstDate;
+}
+// a fixed-period button only makes sense if history reaches back that far;
+// otherwise it would silently show the same thing as "Tout" under a misleading label
+function rangeAvailable(key, firstDate) {
+  if (key === "max" || key === "1d" || !firstDate) return true;
+  const today = new Date();
+  let threshold;
+  if (key === "1w") threshold = new Date(today.getTime() - 7 * 86400000);
+  else { threshold = new Date(today); threshold.setMonth(threshold.getMonth() - (RANGE_MONTHS[key] ?? 12)); }
+  return firstDate <= threshold.toISOString().slice(0, 10);
+}
 
 // ---------- formatters (fr-FR) ----------
 const _eur = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
@@ -124,10 +156,17 @@ function niceTicks(min, max, count) {
 
 const chartUI = { layout: null };
 
+// span-based (not range-name-based) so a custom range picks a sensible format too
+function chartSpanDays() {
+  const pts = state.perf?.points;
+  if (!pts || pts.length < 2) return 0;
+  const at = (p) => (typeof p.t === "number" ? p.t : Date.parse(p.t));
+  return (at(pts[pts.length - 1]) - at(pts[0])) / 86400000;
+}
 function xLabel(t) {
   if (state.range === "1d") return fmtTime.format(t);
   const d = new Date(typeof t === "string" ? t + "T12:00:00Z" : t);
-  return ["1w", "1m", "6m"].includes(state.range) ? fmtDayMon.format(d) : fmtMonYr.format(d);
+  return chartSpanDays() <= 200 ? fmtDayMon.format(d) : fmtMonYr.format(d);
 }
 function tooltipDate(t) {
   // numeric timestamps (1J intraday, 1S/1M hourly) carry a meaningful time of day
@@ -271,6 +310,18 @@ function onChartLeave() {
   $("tooltip").hidden = true;
 }
 
+function rangeSubLabel() {
+  if (state.range === "custom") {
+    const { customFrom: f, customTo: t } = state;
+    if (!f || !t) return "plage personnalisée";
+    return `du ${fmtDate.format(new Date(f + "T12:00:00Z"))} au ${fmtDate.format(new Date(t + "T12:00:00Z"))}`;
+  }
+  if (state.range === "1d" && state.perf?.sessionDate && state.dashboard && state.perf.sessionDate !== state.dashboard.today) {
+    return `dernière séance · ${fmtDate.format(new Date(state.perf.sessionDate + "T12:00:00Z"))}`;
+  }
+  return RANGE_LABEL[state.range];
+}
+
 function renderChartSection() {
   $("chartCard").hidden = false; // unhide before measuring: a hidden card has zero width
   const points = state.perf?.points || [];
@@ -278,11 +329,7 @@ function renderChartSection() {
   const pp = $("periodPct");
   pp.textContent = pct(lastPct);
   pp.className = signCls(lastPct);
-  let sub = RANGE_LABEL[state.range];
-  if (state.range === "1d" && state.perf?.sessionDate && state.dashboard && state.perf.sessionDate !== state.dashboard.today) {
-    sub = `dernière séance · ${fmtDate.format(new Date(state.perf.sessionDate + "T12:00:00Z"))}`;
-  }
-  $("periodSub").textContent = sub;
+  $("periodSub").textContent = rangeSubLabel();
   renderChart();
   renderChartTable();
 }
@@ -934,26 +981,113 @@ function renderSections() {
   host.append(section);
 }
 
+// ---------- account filter (which accounts feed the big performance chart) ----------
+function saveAccountFilter() {
+  if (!state.accountFilter) localStorage.removeItem("acctFilter");
+  else localStorage.setItem("acctFilter", JSON.stringify([...state.accountFilter]));
+}
+
+function renderAcctFilter() {
+  const box = $("acctFilter");
+  const dash = state.dashboard;
+  if (!dash || dash.accounts.length < 2) { box.hidden = true; box.replaceChildren(); return; }
+  box.hidden = false;
+  box.replaceChildren();
+  const allBtn = el("button", "acct-chip", "Tous les comptes");
+  allBtn.type = "button";
+  allBtn.setAttribute("aria-pressed", String(state.accountFilter === null));
+  allBtn.addEventListener("click", () => onAccountFilterChange(null));
+  box.append(allBtn);
+  for (const a of dash.accounts) {
+    const pressed = state.accountFilter === null || state.accountFilter.has(a.id);
+    const b = el("button", "acct-chip", a.label);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(pressed));
+    b.addEventListener("click", () => toggleAccount(a.id));
+    box.append(b);
+  }
+}
+
+function toggleAccount(id) {
+  const allIds = state.dashboard.accounts.map((a) => a.id);
+  let next;
+  if (state.accountFilter === null) {
+    next = new Set([id]); // was showing everything: clicking one isolates it
+  } else {
+    next = new Set(state.accountFilter);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    if (next.size === 0) return; // always keep at least one account selected
+    if (next.size === allIds.length) next = null; // back to "every account"
+  }
+  onAccountFilterChange(next);
+}
+
+function onAccountFilterChange(next) {
+  state.accountFilter = next;
+  saveAccountFilter();
+  renderAcctFilter();
+  // a range the previous selection had enough history for may not apply any more
+  const fd = selectionFirstDate();
+  if (!["max", "1d", "custom"].includes(state.range) && !rangeAvailable(state.range, fd)) state.range = "max";
+  renderRanges();
+  reloadPerf();
+}
+
 // ---------- ranges ----------
 function renderRanges() {
   const box = $("ranges");
   box.replaceChildren();
+  const fd = selectionFirstDate();
   for (const [key, label] of RANGES) {
+    if (!rangeAvailable(key, fd)) continue;
     const b = el("button", null, label);
     b.setAttribute("role", "tab");
     b.setAttribute("aria-selected", String(key === state.range));
     b.addEventListener("click", () => setRange(key));
     box.append(b);
   }
+  const customBtn = el("button", null, "Personnalisé");
+  customBtn.setAttribute("role", "tab");
+  customBtn.setAttribute("aria-selected", String(state.range === "custom"));
+  customBtn.addEventListener("click", () => setRange("custom"));
+  box.append(customBtn);
 }
 
+function showCustomForm() {
+  const fd = selectionFirstDate() || "2000-01-01";
+  const today = state.dashboard?.today || todayStr();
+  const fromInput = $("customFrom"), toInput = $("customTo");
+  fromInput.min = fd; fromInput.max = today;
+  toInput.min = fd; toInput.max = today;
+  fromInput.value = state.customFrom && state.customFrom >= fd ? state.customFrom : fd;
+  toInput.value = state.customTo && state.customTo <= today ? state.customTo : today;
+  $("customRange").hidden = false;
+}
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
 async function setRange(range) {
-  if (range === state.range) return;
+  if (range === state.range && range !== "custom") return;
   state.range = range;
   renderRanges();
+  if (range === "custom") { showCustomForm(); return; } // wait for the form to be submitted
+  $("customRange").hidden = true;
+  await reloadPerf();
+}
+
+function fetchPerf() {
+  const params = new URLSearchParams({ range: state.range });
+  if (state.accountFilter) params.set("accounts", [...state.accountFilter].join(","));
+  if (state.range === "custom") {
+    params.set("from", state.customFrom);
+    params.set("to", state.customTo);
+  }
+  return api(`/api/perf?${params.toString()}`);
+}
+
+async function reloadPerf() {
   $("chartCard").classList.add("refreshing");
   try {
-    state.perf = await api(`/api/perf?range=${range}`);
+    state.perf = await fetchPerf();
     renderChartSection();
   } catch (e) {
     console.warn("perf:", e);
@@ -962,9 +1096,30 @@ async function setRange(range) {
   }
 }
 
+$("customRange").addEventListener("submit", (e) => {
+  e.preventDefault();
+  // clamp client-side too (native date inputs enforce min/max loosely at best),
+  // so the displayed label always matches what the server actually returns
+  const fd = selectionFirstDate() || todayStr();
+  const today = state.dashboard?.today || todayStr();
+  let f = $("customFrom").value, t = $("customTo").value;
+  if (f < fd) f = fd;
+  if (t > today) t = today;
+  if (f > t) [f, t] = [t, f];
+  state.customFrom = f;
+  state.customTo = t;
+  localStorage.setItem("customFrom", f);
+  localStorage.setItem("customTo", t);
+  state.range = "custom";
+  renderRanges();
+  reloadPerf();
+});
+
 // ---------- load & refresh ----------
 function renderAll() {
   renderHero();
+  renderAcctFilter();
+  renderRanges();
   renderChartSection();
   renderSections();
   $("updated").textContent = `Actualisé à ${new Date().toLocaleTimeString("fr-FR")}`;
@@ -989,7 +1144,7 @@ async function refresh(soft) {
   try {
     const [dash, perf] = await Promise.all([
       api("/api/dashboard"),
-      api(`/api/perf?range=${state.range}`),
+      fetchPerf(),
     ]);
     state.dashboard = dash;
     state.perf = perf;

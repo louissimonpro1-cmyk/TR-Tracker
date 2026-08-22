@@ -24,11 +24,15 @@ const state = {
   customFrom: localStorage.getItem("customFrom") || "",
   customTo: localStorage.getItem("customTo") || "",
 };
-const RANGES = [["1d", "1 J"], ["1w", "1 S"], ["1m", "1 M"], ["6m", "6 M"], ["1y", "1 A"], ["3y", "3 A"], ["max", "Tout"]];
-const RANGE_MONTHS = { "3y": 36, "1y": 12, "6m": 6, "1m": 1 };
+const RANGES = [
+  ["1d", "1 J"], ["1w", "1 S"], ["1m", "1 M"], ["6m", "6 M"], ["1y", "1 A"],
+  ["3y", "3 A"], ["5y", "5 A"], ["8y", "8 A"], ["10y", "10 A"], ["max", "Tout"],
+];
+const RANGE_MONTHS = { "10y": 120, "8y": 96, "5y": 60, "3y": 36, "1y": 12, "6m": 6, "1m": 1 };
 const RANGE_LABEL = {
-  max: "depuis l’ouverture", "3y": "sur 3 ans", "1y": "sur 1 an",
-  "6m": "sur 6 mois", "1m": "sur 1 mois", "1w": "sur 1 semaine", "1d": "aujourd’hui",
+  max: "depuis l’ouverture", "10y": "sur 10 ans", "8y": "sur 8 ans", "5y": "sur 5 ans",
+  "3y": "sur 3 ans", "1y": "sur 1 an", "6m": "sur 6 mois", "1m": "sur 1 mois",
+  "1w": "sur 1 semaine", "1d": "aujourd’hui",
 };
 
 // earliest activity date for the accounts currently selected (null selection = all)

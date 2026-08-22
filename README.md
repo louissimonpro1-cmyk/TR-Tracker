@@ -17,23 +17,32 @@ n'est stocké côté serveur.
 - PWA installable sur téléphone, mode clair/sombre, protégé par mot de passe
 - Zéro dépendance npm (Node pur), déployable gratuitement sur Vercel
 
-## Prérequis : le Google Sheet
+## Prérequis : l'historique des transactions
 
-Un Google Sheet contenant l'historique d'activité Trade Republic, avec ces colonnes
-(format des outils d'export TR usuels) :
+Un historique d'activité Trade Republic avec ces colonnes (format des outils
+d'export TR usuels) :
 
 ```
 datetime, date, account_type, category, type, asset_class, name, symbol,
 shares, price, amount, fee, tax, currency, ...
 ```
 
-Le sheet doit être partagé en **« Tous les utilisateurs disposant du lien »**
-(lecture seule). Le lien de partage sert de configuration : personne d'autre ne le
-connaît, ne le publiez nulle part.
+`SHEET_URL` accepte trois formats, tous lus en direct sans rien stocker :
+
+- **Google Sheet** : le lien de partage d'un Sheet contenant ces colonnes
+  (`docs.google.com/spreadsheets/...`) ou son identifiant nu.
+- **Fichier Google Drive** : le lien de partage d'un `.csv` brut déposé dans Drive
+  (`drive.google.com/file/d/...` ou `.../open?id=...`) — pas besoin de l'importer
+  dans un Sheet.
+- **Fichier local** : le chemin d'un `.csv` sur le disque, pour essayer sans rien
+  publier.
+
+Dans les deux cas Google, le partage doit être réglé sur **« Tous les utilisateurs
+disposant du lien »** (lecture seule). Le lien sert de configuration : personne
+d'autre ne le connaît, ne le publiez nulle part.
 
 Les colonnes `account_type` (DEFAULT, PEA…) et `asset_class` (STOCK, FUND, CRYPTO…)
-déterminent les sections affichées ; il n'y a rien à configurer. Pour essayer sans
-publier de sheet, `SHEET_URL` accepte aussi le chemin d'un fichier `.csv` local.
+déterminent les sections affichées ; il n'y a rien d'autre à configurer.
 
 ## Déployer votre instance (gratuit, ~10 min)
 

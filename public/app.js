@@ -1210,21 +1210,33 @@ function renderBell() {
 }
 
 // ---------- alert popup ----------
+// the rule id is the last "|"-separated segment of the trigger id (the asset key
+// itself may contain "|", so splitting from the end is what's safe here)
+const ruleIdOf = (t) => t.id.split("|").pop();
+
 // One line per trigger, kept to the essentials (which situation, on which account,
 // how far past the threshold) — the exact threshold and reference price are one tap
-// away in the settings dialog, not worth repeating on every row here.
+// away in the settings dialog, not worth repeating on every row here. Grouped under
+// the three thresholds (PRU / dernier achat / dernière vente) rather than one flat
+// list sorted by magnitude, so a big move on an unrelated rule doesn't bury a smaller
+// one under the section you actually came to check.
 function showAlertPopup() {
   const list = $("triggerList");
   list.replaceChildren();
-  for (const t of state.alertTriggers) {
-    const row = el("div", "trigger");
-    row.append(logoEl(t.position));
-    const main = el("div", "tg-main");
-    main.append(el("div", "tg-name", t.position.name));
-    main.append(el("div", "tg-sub", `${t.label} · ${t.accountLabel}`));
-    row.append(main);
-    row.append(el("div", "tg-pct " + signCls(t.actualPct), pct(t.actualPct, 1)));
-    list.append(row);
+  for (const [title, upId, downId] of ALERT_GROUPS) {
+    const items = state.alertTriggers.filter((t) => { const r = ruleIdOf(t); return r === upId || r === downId; });
+    if (!items.length) continue;
+    list.append(el("div", "trigger-group-title", title));
+    for (const t of items) {
+      const row = el("div", "trigger");
+      row.append(logoEl(t.position));
+      const main = el("div", "tg-main");
+      main.append(el("div", "tg-name", t.position.name));
+      main.append(el("div", "tg-sub", `${t.label} · ${t.accountLabel}`));
+      row.append(main);
+      row.append(el("div", "tg-pct " + signCls(t.actualPct), pct(t.actualPct, 1)));
+      list.append(row);
+    }
   }
   const n = state.alertTriggers.length;
   $("alertPopupTitle").textContent = n === 1 ? "1 alerte déclenchée" : `${n} alertes déclenchées`;

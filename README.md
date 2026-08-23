@@ -1,4 +1,4 @@
-# Dashboard Trade Republic
+# TR Tracker
 
 Tableau de bord auto-hébergé pour compte titre Trade Republic : performance du
 portefeuille en temps réel, positions ouvertes, historique des positions soldées.
@@ -50,6 +50,8 @@ Les colonnes `account_type` (DEFAULT, PEA…) et `asset_class` (STOCK, FUND, CRY
 déterminent les sections affichées ; il n'y a rien d'autre à configurer.
 
 ## Déployer votre instance (gratuit, ~10 min)
+
+Version détaillée, pas à pas et sans prérequis technique : [INSTALLATION.md](INSTALLATION.md).
 
 1. **Fork** : bouton « Fork » en haut de cette page GitHub (compte GitHub gratuit).
 2. **Vercel** : créez un compte gratuit sur [vercel.com](https://vercel.com) (plan

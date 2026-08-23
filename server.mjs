@@ -109,7 +109,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Dashboard Trade Republic : http://localhost:${PORT}`);
+  console.log(`TR Tracker : http://localhost:${PORT}`);
   const lan = Object.values(os.networkInterfaces()).flat()
     .filter((i) => i && i.family === "IPv4" && !i.internal)
     .map((i) => i.address);

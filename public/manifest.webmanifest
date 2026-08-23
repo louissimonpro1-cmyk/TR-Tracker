@@ -1,7 +1,7 @@
 {
-  "name": "Mon portefeuille Trade Republic",
+  "name": "TR Tracker",
   "short_name": "Portefeuille",
-  "description": "État des lieux du compte titre Trade Republic",
+  "description": "Portfolio tracking pour Trade Republic",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0d0d0d",

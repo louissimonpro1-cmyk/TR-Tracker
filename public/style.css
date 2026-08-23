@@ -243,17 +243,6 @@ thead th.group {
 .th-sort:hover .th-arrow { opacity: 0.6; }
 .th-sort.on .th-arrow { opacity: 1; }
 th.left .th-sort { justify-content: flex-start; }
-.group-toggle {
-  background: none; border: 0; cursor: pointer; padding: 0;
-  font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit;
-  white-space: nowrap;
-}
-.group-toggle:hover { color: var(--text); }
-th.toggle-col { vertical-align: middle; padding-bottom: 8px; width: 1%; }
-th.toggle-col .group-toggle {
-  white-space: normal; max-width: 6.5em;
-  line-height: 1.45; text-align: center;
-}
 tbody td {
   padding: 10px; border-bottom: 1px solid var(--grid);
   text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums;
@@ -265,7 +254,24 @@ td.sep, th.sep { border-left: 1px solid var(--grid); }
 .pos { color: var(--up-text); }
 .neg { color: var(--down-text); }
 .na { color: var(--baseline); }
-.small-pct { font-size: 12px; }
+
+/* click a position row to reveal its chart in a full-width row underneath */
+.pos-row { cursor: pointer; }
+.row-chev {
+  display: inline-block; width: 9px; flex: none;
+  color: var(--muted); font-size: 9px; transition: transform 0.12s;
+}
+.pos-row.open .row-chev { transform: rotate(90deg); }
+.pos-detail td {
+  /* opt out of the sticky first-column rule: this cell spans the whole table */
+  position: static; padding: 4px 14px 16px; text-align: left; white-space: normal;
+  background: var(--wash);
+}
+/* the table scrolls sideways; pinning the chart to the left keeps it on screen even
+   when the reader has scrolled out to the "Dernière vente" columns */
+.pos-detail .asset-chart-box {
+  position: sticky; left: 14px; margin-top: 0; max-width: 660px;
+}
 
 /* sticky asset column (the header cell is sticky on both axes, so it sits on top) */
 .data-table th:first-child, .data-table td:first-child {

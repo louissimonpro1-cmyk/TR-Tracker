@@ -15,7 +15,6 @@ function loadAccountFilter() {
 }
 const state = {
   range: "max", dashboard: null, perf: null,
-  showOwnPerf: localStorage.getItem("showOwnPerf") === "1",
   posSort: loadSort("posSort", { key: "valueEur", dir: "desc" }),
   arcSort: loadSort("arcSort", { key: "lastOpDate", dir: "desc" }),
   openCards: new Set(),    // asset keys whose mobile card is expanded
@@ -506,7 +505,6 @@ const shortDate = (d) => (d ? fmtDate.format(new Date(d + "T12:00:00Z")) : "—"
 function renderPositionTable(table, list) {
   table.replaceChildren();
 
-  const expanded = state.showOwnPerf;
   const sort = state.posSort, onSort = sortPositions;
   const thead = el("thead");
   const r1 = el("tr");
@@ -516,34 +514,23 @@ function renderPositionTable(table, list) {
   for (const [h, key] of mainCols) r1.append(th(h, { rowspan: 2, sortKey: key, sort, onSort }));
   r1.append(th("Dernier achat", { colspan: 4, cls: "group sep" }));
   r1.append(th("Dernière vente", { colspan: 4, cls: "group sep" }));
-  // "Performance du titre": collapsible column group
-  const perfTh = th("", expanded ? { colspan: ASSET_PERIODS.length, cls: "group sep" } : { rowspan: 2, cls: "group sep toggle-col" });
-  const toggleBtn = el("button", "group-toggle", `Performance du titre ${expanded ? "▾" : "▸"}`);
-  toggleBtn.title = expanded ? "Replier les colonnes de performance" : "Déplier la performance du titre sur 3 A / 1 A / 6 M / 1 M / 1 S / 1 J";
-  toggleBtn.addEventListener("click", () => {
-    state.showOwnPerf = !state.showOwnPerf;
-    localStorage.setItem("showOwnPerf", state.showOwnPerf ? "1" : "0");
-    renderSections();
-  });
-  perfTh.append(toggleBtn);
-  r1.append(perfTh);
   const r2 = el("tr");
   const subCols = [
     ["Prix", "lastBuyPrice", "sep"], ["Date", "lastBuyDate", ""], ["Écart (%)", "vsLastBuyPct", ""], ["Écart (€)", "vsLastBuyEur", ""],
     ["Prix", "lastSellPrice", "sep"], ["Date", "lastSellDate", ""], ["Écart (%)", "vsLastSellPct", ""], ["Écart (€)", "vsLastSellEur", ""],
   ];
-  const perfCols = expanded
-    ? ASSET_PERIODS.map(([lbl, k], i) => [lbl, `ownPerf.${k}`, i === 0 ? "sep" : ""])
-    : [];
-  for (const [h, key, cls] of [...subCols, ...perfCols]) r2.append(th(h, { cls, sortKey: key, sort, onSort }));
+  for (const [h, key, cls] of subCols) r2.append(th(h, { cls, sortKey: key, sort, onSort }));
   thead.append(r1, r2);
   table.append(thead);
 
   const tbody = el("tbody");
+  const COLS = 1 + mainCols.length + subCols.length; // width of an expanded detail row
   for (const p of list) {
-    const row = el("tr");
+    const row = el("tr", "pos-row");
     const sold = p.lastSellPrice != null;
-    row.append(assetCell(p));
+    const titre = assetCell(p);
+    titre.querySelector(".asset")?.prepend(el("span", "row-chev", "▸"));
+    row.append(titre);
     row.append(tdNum(qty(p.qty)));
     row.append(tdNum(eur(p.valueEur)));
     row.append(tdNum(price(p.priceEur)));
@@ -559,15 +546,26 @@ function renderPositionTable(table, list) {
     row.append(tdNum(sold ? shortDate(p.lastSellDate) : "—", sold ? null : "na"));
     row.append(tdNum(pct(p.vsLastSellPct), signCls(p.vsLastSellPct)));
     row.append(tdNum(priceS(p.vsLastSellEur), signCls(p.vsLastSellEur)));
-    if (expanded) {
-      const o = p.ownPerf || {};
-      ASSET_PERIODS.forEach(([, k], i) => {
-        row.append(tdNum(pct(o[k], 1), `small-pct ${i === 0 ? "sep" : ""} ${signCls(o[k])}`.trim()));
-      });
-    } else {
-      row.append(tdNum("", "sep toggle-col"));
-    }
     tbody.append(row);
+
+    // clicking a row reveals the same chart the mobile card shows, in a full-width
+    // row underneath; open state is shared with the cards through state.openCards
+    const perf = assetPerfBox(p);
+    if (!perf) continue;
+    const detail = el("tr", "pos-detail");
+    const cell = el("td");
+    cell.colSpan = COLS;
+    cell.append(perf.node);
+    detail.append(cell);
+    tbody.append(detail);
+    const apply = (open) => {
+      detail.hidden = !open;
+      row.classList.toggle("open", open);
+      if (open) { state.openCards.add(p.key); perf.load(); }
+      else state.openCards.delete(p.key);
+    };
+    apply(state.openCards.has(p.key)); // survives the 60 s refresh
+    row.addEventListener("click", () => apply(detail.hidden));
   }
   table.append(tbody);
 }
@@ -611,7 +609,9 @@ function renderArchiveTable(table, list) {
 // ---------- mobile cards (replace the tables under 680px, via CSS) ----------
 function kv(label, value, cls, align, sub) {
   const d = el("div", "kv" + (align ? " " + align : ""));
-  d.append(el("div", "kv-l", label));
+  // a cell with no label still gets a spacer, so its value stays on the same baseline
+  // as the labelled cells beside it in the grid
+  d.append(el("div", "kv-l", label || " "));
   d.append(el("div", "kv-v" + (cls ? " " + cls : ""), value));
   if (sub) d.append(el("div", "kv-sub", sub));
   return d;
@@ -890,13 +890,14 @@ function renderPositionCards(box, list) {
     const sold = p.lastSellPrice != null;
     grid.append(kv("PRU", price(p.avgBuy)));
     grid.append(kv("Dernier achat", price(p.lastBuyPrice), null, "kv-c", shortDate(p.lastBuyDate)));
-    grid.append(kv("Depuis l’achat",
+    // unlabelled: sitting right of "Dernier achat", the écart needs no restating
+    grid.append(kv(null,
       p.lastBuyPrice == null ? "—" : `${pct(p.vsLastBuyPct)}\n${priceS(p.vsLastBuyEur)}`,
       p.lastBuyPrice == null ? null : signCls(p.vsLastBuyPct), "kv-r"));
     grid.append(kv("Investi", eur(p.investedEur)));
     grid.append(kv("Dernière vente", sold ? price(p.lastSellPrice) : "—", null, "kv-c",
       sold ? shortDate(p.lastSellDate) : null));
-    grid.append(kv("Depuis la vente",
+    grid.append(kv(null,
       sold ? `${pct(p.vsLastSellPct)}\n${priceS(p.vsLastSellEur)}` : "—",
       sold ? signCls(p.vsLastSellPct) : null, "kv-r"));
 

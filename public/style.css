@@ -298,6 +298,7 @@ td.sep, th.sep { border-left: 1px solid var(--grid); }
 .approx {
   color: var(--muted); font-size: 10px; border: 1px solid var(--border);
   border-radius: 4px; padding: 0 4px; margin-left: 5px; cursor: help;
+  white-space: nowrap; /* the badge now carries a date: never break it across lines */
 }
 
 /* fallback avatar hues (categorical palette, light/dark aware) */

@@ -395,9 +395,22 @@ function logoEl(a) {
   return img;
 }
 
-function approxBadge() {
-  const badge = el("span", "approx", "≈");
-  badge.title = "Cours indisponible sur Yahoo Finance — valorisé au dernier prix de transaction connu.";
+// A bare "≈" said the price was approximate, not how old it was — and the two are
+// very different claims: a leveraged product frozen since June is not a price that
+// merely lags by a day. The badge therefore carries the date it is stuck on. The
+// year only shows when it is not the current one, to keep the badge narrow.
+const fmtStale = new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit" });
+const fmtStaleY = new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+const staleDate = (d) => {
+  const dt = new Date(d + "T12:00:00Z");
+  return (dt.getUTCFullYear() === new Date().getUTCFullYear() ? fmtStale : fmtStaleY).format(dt);
+};
+
+function approxBadge(date) {
+  const badge = el("span", "approx", date ? `≈ ${staleDate(date)}` : "≈");
+  badge.title = date
+    ? `Cours indisponible sur Yahoo Finance : valorisé au prix de transaction du ${shortDate(date)}, inchangé depuis cette date.`
+    : "Cours indisponible sur Yahoo Finance — valorisé au dernier prix de transaction connu.";
   return badge;
 }
 
@@ -407,7 +420,7 @@ function assetCell(a) {
   const img = logoEl(a);
   const txt = el("div");
   const nameRow = el("div", "a-name", a.name);
-  if (a.priceSource === "transaction") nameRow.append(approxBadge());
+  if (a.priceSource === "transaction") nameRow.append(approxBadge(a.priceDate));
   txt.append(nameRow);
   txt.append(el("div", "a-sub", a.isin));
   box.append(img, txt);
@@ -869,7 +882,7 @@ function cardHead(a, rightText, rightCls, dayPct) {
   const head = el("div", "pcard-head");
   head.append(logoEl(a));
   const name = el("div", "pcard-name", a.name);
-  if (a.priceSource === "transaction") name.append(approxBadge());
+  if (a.priceSource === "transaction") name.append(approxBadge(a.priceDate));
   head.append(name);
   head.append(el("div", "pcard-value " + (rightCls || ""), rightText));
   if (dayPct != null) head.append(el("span", "pcard-day " + signCls(dayPct), pct(dayPct, 1)));

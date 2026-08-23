@@ -825,10 +825,17 @@ function assetPerfBox(p, large) {
     for (const [k, b] of buttons) b.setAttribute("aria-selected", String(k === selected));
     if (!data) return;
     // width pinned to the portfolio-wide chart's own rendered width, so "same size"
-    // holds regardless of the table's own width (it can run far wider than the page)
+    // holds regardless of the table's own width (it can run far wider than the page) —
+    // but capped to what the table's own scroll viewport can actually show, minus the
+    // 14px sticky offset and some breathing room, otherwise the chart itself would be
+    // the reason a horizontal scroll is needed. The two widths usually differ by the
+    // vertical scrollbar's own width: the table scrolls vertically, the main chart never does.
     if (large) {
       const mainW = $("chartWrap")?.clientWidth;
-      if (mainW) { wrap.style.width = `${mainW}px`; box.style.width = `${mainW}px`; }
+      const scroller = wrap.closest(".scroll-x");
+      const visible = scroller ? scroller.clientWidth - 30 : mainW;
+      const targetW = mainW ? Math.min(mainW, visible) : null;
+      if (targetW) { wrap.style.width = `${targetW}px`; box.style.width = `${targetW}px`; }
     }
     const pts = assetRangePoints(data, selected);
     if (!pts) {

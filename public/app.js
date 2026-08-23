@@ -1249,6 +1249,18 @@ async function apiAlerts(body) {
   return r.json();
 }
 
+// hour-only, deliberately: the daily check runs from one of 24 hourly cron entries
+// (see vercel.json) and only ever compares whole local hours, so a minute picker would
+// promise a precision nothing downstream honours — Vercel itself only guarantees the
+// invocation falls somewhere within the chosen hour on the free plan
+function buildHourOptions() {
+  const sel = $("alertHour");
+  sel.replaceChildren();
+  for (let h = 0; h < 24; h++) {
+    sel.append(new Option(`${String(h).padStart(2, "0")} h`, String(h)));
+  }
+}
+
 function buildThresholdRows() {
   const box = $("thresholds");
   box.replaceChildren(el("div"), el("div", "th-head", "Hausse"), el("div", "th-head", "Baisse"));
@@ -1269,8 +1281,8 @@ function buildThresholdRows() {
 function fillSettingsForm() {
   const c = state.alertConfig;
   $("alertEnabled").checked = c.enabled;
-  $("alertHour").value = `${String(c.hour).padStart(2, "0")}:00`;
-  $("alertTz").textContent = `heure locale (${c.tz})`;
+  $("alertHour").value = String(c.hour);
+  $("alertTz").textContent = `heure locale (${c.tz}) — reçue dans l’heure suivante, pas pile à la minute`;
   for (const r of ALERT_RULES) $(`thr_${r.id}`).value = c.thresholds[r.id] ?? "";
 }
 
@@ -1279,7 +1291,7 @@ function readSettingsForm() {
   for (const r of ALERT_RULES) thresholds[r.id] = $(`thr_${r.id}`).value;
   return normalizeAlertConfig({
     enabled: $("alertEnabled").checked,
-    hour: Number(($("alertHour").value || "09:00").slice(0, 2)),
+    hour: Number($("alertHour").value),
     tz: BROWSER_TZ,
     thresholds,
   });
@@ -1432,6 +1444,7 @@ new ResizeObserver(() => {
 
 // ---------- alerts wiring ----------
 state.alertConfig = loadAlertConfig();
+buildHourOptions();
 buildThresholdRows();
 $("bellBtn").addEventListener("click", openAlertSettings);
 

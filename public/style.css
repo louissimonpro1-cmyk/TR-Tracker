@@ -468,9 +468,9 @@ details.pcard[open] .pcard-chev { transform: rotate(90deg); }
 .switch-row em { color: var(--muted); font-size: 12px; font-style: normal; }
 
 .field-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
-.field-row input[type="time"] {
+.field-row select {
   background: var(--page); border: 1px solid var(--border); border-radius: 8px;
-  color: var(--text); font: inherit; padding: 6px 9px;
+  color: var(--text); font: inherit; padding: 6px 9px; cursor: pointer;
 }
 .field-note { color: var(--muted); font-size: 12px; }
 

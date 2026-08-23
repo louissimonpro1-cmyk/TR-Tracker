@@ -53,7 +53,8 @@ déterminent les sections affichées ; il n'y a rien d'autre à configurer.
 2. **Vercel** : créez un compte gratuit sur [vercel.com](https://vercel.com) (plan
    Hobby), « Add New… → Project », importez votre fork.
 3. **Variables d'environnement** (dans l'écran d'import, section Environment
-   Variables — ou plus tard dans Settings → Environment Variables) :
+   Variables — ou plus tard via **Environment Variables** dans le menu de gauche
+   du projet) :
    - `SHEET_URL` : le lien de partage de votre Google Sheet
    - `DASHBOARD_PASSWORD` : le mot de passe qui protégera votre dashboard
 4. **Deploy**. Votre dashboard est sur `https://<votre-projet>.vercel.app`.
@@ -73,24 +74,59 @@ hausse et baisse, par rapport au PRU, au dernier prix d'achat et au dernier prix
 tableau de bord dès qu'au moins un seuil est franchi, en indiquant les titres
 concernés, la situation et le pourcentage réel relevé.
 
-Pour recevoir en plus une **notification push** quand l'app est fermée, il faut deux
-choses (gratuites toutes les deux) :
+Pour recevoir en plus une **notification push** quand l'app est fermée, il faut ajouter
+quatre variables d'environnement et connecter une base — tout est gratuit.
 
-1. **Des clés VAPID**, qui identifient votre déploiement auprès des navigateurs :
-   ```
-   npm run vapid
-   ```
-   Ajoutez `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` et `VAPID_SUBJECT` aux variables
-   d'environnement du projet Vercel, puis redéployez.
-2. **Une base persistante**, pour que la vérification programmée retrouve les appareils
-   abonnés : dans le projet Vercel, onglet **Storage**, connectez une base **Redis**
-   (Upstash, offre gratuite). Vercel injecte alors `KV_REST_API_URL` et
-   `KV_REST_API_TOKEN` tout seul, il n'y a rien d'autre à écrire.
+### 1. Générer les clés VAPID
 
-Ajoutez enfin `CRON_SECRET` (une chaîne aléatoire de 16 caractères ou plus) : Vercel
-l'envoie automatiquement à la tâche programmée et le dashboard refuse les appels qui
-ne le portent pas. Cliquez ensuite sur **Activer sur cet appareil** dans les réglages,
-sur chaque appareil voulu — téléphone et ordinateur s'abonnent séparément.
+Sur votre ordinateur, dans le dossier du projet :
+
+```
+npm run vapid
+```
+
+Ça affiche trois lignes `NOM=valeur`. Gardez-les sous la main, vous allez les copier
+dans Vercel à l'étape suivante. Ne les partagez jamais publiquement (ne les commitez
+pas, ne les collez pas dans une issue GitHub) : `VAPID_PRIVATE_KEY` doit rester secrète.
+
+### 2. Ajouter les variables dans Vercel
+
+Sur [vercel.com](https://vercel.com), ouvrez votre projet, puis dans le **menu de
+gauche** cliquez directement sur **Environment Variables** (pas besoin de passer par
+Settings, le lien est dans le menu principal). Vous arrivez sur une page qui liste déjà
+`SHEET_URL` et `DASHBOARD_PASSWORD` — les mêmes que vous avez ajoutées au premier
+déploiement.
+
+En haut à droite, cliquez sur le bouton **« Add Environment Variable »**. Une ligne
+`Name` / `Value` apparaît : vous y ajoutez, une par une, quatre variables (nouveau clic
+sur « Add Environment Variable » à chaque fois, ou une ligne supplémentaire s'ouvre
+automatiquement selon la version de l'interface) :
+
+| Name | Value |
+|---|---|
+| `VAPID_PUBLIC_KEY` | la clé publique affichée par `npm run vapid` |
+| `VAPID_PRIVATE_KEY` | la clé privée affichée par `npm run vapid` |
+| `VAPID_SUBJECT` | `mailto:` suivi de votre email, ex. `mailto:vous@example.com` |
+| `CRON_SECRET` | une chaîne inventée d'au moins 16 caractères, ex. `k7Xm2pQr9vNt4wZa` |
+
+Pour chacune, cochez **Production** avant de valider (c'est ce qui indique à Vercel
+que la variable s'applique à votre dashboard en ligne, pas seulement aux previews).
+
+### 3. Connecter une base Redis
+
+Toujours dans le menu de gauche, cliquez sur **Storage**, puis créez une base
+**Redis** (offre Upstash gratuite) et connectez-la au projet. Vercel ajoute alors
+lui-même les variables nécessaires (`KV_REST_API_URL`, `KV_REST_API_TOKEN`) — il n'y a
+rien à copier ni à taper pour celles-ci. C'est cette base qui permet à la vérification
+programmée de retrouver, le lendemain, les appareils qui se sont abonnés la veille.
+
+### 4. Redéployer et activer
+
+Une fois les quatre variables et la base en place, redéployez (Vercel le propose
+automatiquement après l'ajout d'une variable, sinon relancez un déploiement depuis
+l'onglet **Deployments**). Ouvrez ensuite le dashboard, cliquez sur la cloche, et un
+bouton **« Activer sur cet appareil »** apparaît dans le bloc « Notifications push » —
+à cliquer sur chaque appareil voulu, téléphone et ordinateur s'abonnant séparément.
 
 Détails utiles :
 

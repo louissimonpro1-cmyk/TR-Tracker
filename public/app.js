@@ -19,7 +19,6 @@ const state = {
   posSort: loadSort("posSort", { key: "valueEur", dir: "desc" }),
   arcSort: loadSort("arcSort", { key: "lastOpDate", dir: "desc" }),
   openCards: new Set(),    // asset keys whose mobile card is expanded
-  openPerfFolds: new Set(), // asset keys whose mini-chart is expanded
   accountFilter: loadAccountFilter(), // Set<accountId>|null — null means "every account"
   customFrom: localStorage.getItem("customFrom") || "",
   customTo: localStorage.getItem("customTo") || "",
@@ -34,6 +33,14 @@ const RANGES = [
   ["3y", "3 A"], ["5y", "5 A"], ["8y", "8 A"], ["10y", "10 A"], ["max", "Tout"],
 ];
 const RANGE_MONTHS = { "10y": 120, "8y": 96, "5y": 60, "3y": 36, "1y": 12, "6m": 6, "1m": 1 };
+// Periods offered for a single holding ("Performance du titre"), longest first. Drives
+// both the mobile pills and the desktop columns. "Tout" runs from the first purchase of
+// that asset; a period the quote history cannot cover comes back null from ownPerf and
+// its pill is greyed out rather than showing a shorter span under a longer label.
+const ASSET_PERIODS = [
+  ["Tout", "all"], ["10 A", "y10"], ["5 A", "y5"], ["3 A", "y3"], ["1 A", "y1"],
+  ["6 M", "m6"], ["1 M", "m1"], ["1 S", "w1"], ["1 J", "d1"],
+];
 const RANGE_LABEL = {
   max: "depuis l’ouverture", "10y": "sur 10 ans", "8y": "sur 8 ans", "5y": "sur 5 ans",
   "3y": "sur 3 ans", "1y": "sur 1 an", "6m": "sur 6 mois", "1m": "sur 1 mois",
@@ -509,7 +516,7 @@ function renderPositionTable(table, list) {
   r1.append(th("Dernier achat", { colspan: 4, cls: "group sep" }));
   r1.append(th("Dernière vente", { colspan: 4, cls: "group sep" }));
   // "Performance du titre": collapsible column group
-  const perfTh = th("", expanded ? { colspan: 6, cls: "group sep" } : { rowspan: 2, cls: "group sep toggle-col" });
+  const perfTh = th("", expanded ? { colspan: ASSET_PERIODS.length, cls: "group sep" } : { rowspan: 2, cls: "group sep toggle-col" });
   const toggleBtn = el("button", "group-toggle", `Performance du titre ${expanded ? "▾" : "▸"}`);
   toggleBtn.title = expanded ? "Replier les colonnes de performance" : "Déplier la performance du titre sur 3 A / 1 A / 6 M / 1 M / 1 S / 1 J";
   toggleBtn.addEventListener("click", () => {
@@ -525,8 +532,7 @@ function renderPositionTable(table, list) {
     ["Prix", "lastSellPrice", "sep"], ["Date", "lastSellDate", ""], ["Écart (%)", "vsLastSellPct", ""], ["Écart (€)", "vsLastSellEur", ""],
   ];
   const perfCols = expanded
-    ? [["3 A", "ownPerf.y3", "sep"], ["1 A", "ownPerf.y1", ""], ["6 M", "ownPerf.m6", ""],
-       ["1 M", "ownPerf.m1", ""], ["1 S", "ownPerf.w1", ""], ["1 J", "ownPerf.d1", ""]]
+    ? ASSET_PERIODS.map(([lbl, k], i) => [lbl, `ownPerf.${k}`, i === 0 ? "sep" : ""])
     : [];
   for (const [h, key, cls] of [...subCols, ...perfCols]) r2.append(th(h, { cls, sortKey: key, sort, onSort }));
   thead.append(r1, r2);
@@ -554,10 +560,9 @@ function renderPositionTable(table, list) {
     row.append(tdNum(priceS(p.vsLastSellEur), signCls(p.vsLastSellEur)));
     if (expanded) {
       const o = p.ownPerf || {};
-      const periods = [["y3", "sep"], ["y1", ""], ["m6", ""], ["m1", ""], ["w1", ""], ["d1", ""]];
-      for (const [k, cls] of periods) {
-        row.append(tdNum(pct(o[k], 1), `small-pct ${cls} ${signCls(o[k])}`.trim()));
-      }
+      ASSET_PERIODS.forEach(([, k], i) => {
+        row.append(tdNum(pct(o[k], 1), `small-pct ${i === 0 ? "sep" : ""} ${signCls(o[k])}`.trim()));
+      });
     } else {
       row.append(tdNum("", "sep toggle-col"));
     }
@@ -611,11 +616,11 @@ function kv(label, value, cls, align, sub) {
   return d;
 }
 
-// the 6 period pills double as range buttons for the per-asset mini chart
+// the period pills double as range buttons for the per-asset mini chart
 function miniPerfRow(o) {
   const row = el("div", "pcard-perf");
   const buttons = new Map();
-  for (const [lbl, k] of [["3 A", "y3"], ["1 A", "y1"], ["6 M", "m6"], ["1 M", "m1"], ["1 S", "w1"], ["1 J", "d1"]]) {
+  for (const [lbl, k] of ASSET_PERIODS) {
     const cell = el("button", "pp-cell");
     cell.type = "button";
     if (o?.[k] == null) cell.disabled = true;
@@ -639,7 +644,7 @@ function fetchAssetSeries(key) {
   return assetSeriesMem.get(key);
 }
 
-const ASSET_RANGE_DAYS = { y3: 3 * 365, y1: 365, m6: 182, m1: 30, w1: 7 };
+const ASSET_RANGE_DAYS = { y10: 10 * 365, y5: 5 * 365, y3: 3 * 365, y1: 365, m6: 182, m1: 30, w1: 7 };
 function assetRangePoints(data, key) {
   if (key === "d1") {
     const intra = data.intraday;
@@ -678,7 +683,10 @@ function assetRangePoints(data, key) {
   const daily = data.daily || [];
   if (daily.length < 2) return null;
   const endMs = Date.parse(daily[daily.length - 1][0]);
-  const startKey = new Date(endMs - ASSET_RANGE_DAYS[key] * 86400000).toISOString().slice(0, 10);
+  // "Tout" starts at the first purchase; the fixed periods count back from today
+  const startKey = key === "all"
+    ? (data.firstBuyDate || daily[0][0])
+    : new Date(endMs - ASSET_RANGE_DAYS[key] * 86400000).toISOString().slice(0, 10);
   const arr = daily.filter(([d]) => d >= startKey);
   if (arr.length < 2 || !(arr[0][1] > 0)) return null;
   const base = arr[0][1];
@@ -732,10 +740,14 @@ function renderMiniChart(wrap, svg, tip, pts, rangeKey) {
   }
   sv("circle", { cx: x(n - 1), cy: y(pts[n - 1].pct), r: 3, fill: "var(--accent)" }, svg);
 
+  // span-based rather than keyed on the range name: "Tout" can cover three months or
+  // eight years depending on when the position was opened
+  const asMs = (t) => (typeof t === "number" ? t : Date.parse(t + "T12:00:00Z"));
+  const spanDays = (asMs(pts[n - 1].t) - asMs(pts[0].t)) / 86400000;
   const xl = (t) => {
     if (rangeKey === "d1") return fmtTime.format(t);
-    const d = new Date(typeof t === "number" ? t : t + "T12:00:00Z");
-    return (["y3", "y1"].includes(rangeKey) ? fmtMonYr : fmtDayMon).format(d);
+    const d = new Date(asMs(t));
+    return (spanDays > 200 ? fmtMonYr : fmtDayMon).format(d);
   };
   const l1 = sv("text", { x: padL, y: H - 4, fill: "var(--muted)", "font-size": 9.5, "font-family": "inherit" }, svg);
   l1.textContent = xl(pts[0].t);
@@ -776,12 +788,15 @@ function renderMiniChart(wrap, svg, tip, pts, rangeKey) {
   svg.onpointerleave = () => { cross.setAttribute("visibility", "hidden"); tip.hidden = true; };
 }
 
-function assetPerfFold(p) {
+// Returns { node, load }: the chart lives directly in the card body, so opening a
+// position shows its curve straight away instead of hiding it behind a second fold.
+// `load` is deferred to the card opening — fetching a series per position on render
+// would fire one request per holding on every refresh.
+function assetPerfBox(p) {
   const o = p.ownPerf || {};
   if (!Object.values(o).some((v) => v != null)) return null; // no market data (warrants)
-  const fold = el("details", "pp-fold");
-  fold.append(el("summary", null, "Performance du titre"));
   const box = el("div", "asset-chart-box");
+  box.append(el("div", "pp-title", "Performance du titre"));
   const wrap = el("div", "mini-chart-wrap");
   const svg = sv("svg", {});
   const tip = el("div", "tooltip mini-tip");
@@ -791,9 +806,8 @@ function assetPerfFold(p) {
   note.hidden = true;
   const { row, buttons } = miniPerfRow(o);
   box.append(wrap, note, row);
-  fold.append(box);
 
-  let selected = ["y1", "m6", "m1", "y3", "w1", "d1"].find((k) => o[k] != null);
+  let selected = ["y1", "m6", "m1", "y3", "w1", "d1", "all"].find((k) => o[k] != null);
   let data = null;
   const render = () => {
     for (const [k, b] of buttons) b.setAttribute("aria-selected", String(k === selected));
@@ -823,12 +837,7 @@ function assetPerfFold(p) {
       note.textContent = "Courbe indisponible.";
     }
   };
-  fold.addEventListener("toggle", () => {
-    if (fold.open) { state.openPerfFolds.add(p.key); load(); }
-    else state.openPerfFolds.delete(p.key);
-  });
-  if (state.openPerfFolds.has(p.key)) { fold.open = true; load(); } // survives refreshes
-  return fold;
+  return { node: box, load };
 }
 
 function cardHead(a, rightText, rightCls, dayPct) {
@@ -845,13 +854,14 @@ function cardHead(a, rightText, rightCls, dayPct) {
 
 // collapsible card: summary = head + sub (always visible), body = detail grid + perf.
 // Open cards are remembered for the session so the 60 s refresh never closes them.
-function makeCard(cardKey, headEl, subEl, bodyChildren) {
+function makeCard(cardKey, headEl, subEl, bodyChildren, onOpen) {
   const card = el("details", "pcard");
   card.open = state.openCards.has(cardKey);
   card.addEventListener("toggle", () => {
-    if (card.open) state.openCards.add(cardKey);
+    if (card.open) { state.openCards.add(cardKey); onOpen?.(); }
     else state.openCards.delete(cardKey);
   });
+  if (card.open) onOpen?.(); // already expanded before this re-render
   const sum = el("summary", "pcard-summary");
   sum.append(headEl, subEl);
   card.append(sum);
@@ -887,7 +897,9 @@ function renderPositionCards(box, list) {
     realized.append(el("span", "pr-label", "P&L réalisé sur ventes"));
     realized.append(el("span", "pr-value " + (sold ? signCls(p.realized) : "na"), sold ? eurS(p.realized) : "—"));
 
-    box.append(makeCard(p.key, cardHead(p, eur(p.valueEur), null, p.ownPerf?.d1), sub, [grid, realized, assetPerfFold(p)]));
+    const perf = assetPerfBox(p);
+    box.append(makeCard(p.key, cardHead(p, eur(p.valueEur), null, p.ownPerf?.d1), sub,
+      [grid, realized, perf?.node], perf?.load));
   }
 }
 

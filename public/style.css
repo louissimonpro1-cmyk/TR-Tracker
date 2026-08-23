@@ -367,10 +367,11 @@ details.pcard[open] .pcard-chev { transform: rotate(90deg); }
   color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
   margin-bottom: 6px;
 }
-/* auto-fit grid rather than a flex row: nine periods wrap onto a second line on a
-   phone instead of squeezing every pill until the labels break */
+/* auto-fit grid rather than a flex row: ten periods wrap onto further lines on a phone
+   instead of squeezing every pill until the labels break. The minimum fits the widest
+   label ("Depuis achat") without truncation. */
 .pcard-perf {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
   gap: 5px; margin-top: 8px;
 }
 .pp-cell {

@@ -12,8 +12,9 @@ n'est stocké côté serveur.
 - **Une section par compte** : PEA, CTO, Cryptos — affichées uniquement si le compte
   existe et contient au moins une position ouverte
 - Détail par position : PRU, performance, dernier achat, dernière vente, et performance
-  propre du titre avec mini-graphique sur 9 périodes (1 J à 10 A, plus « Tout » depuis
-  votre premier achat) ; une période que l'historique ne couvre pas est grisée
+  propre du titre avec mini-graphique sur 10 périodes — 1 J à 10 A, « Depuis achat »
+  (votre entrée en position) et « Tout » (toute l'histoire cotée du titre, jusqu'à son
+  introduction en bourse) ; une période que l'historique ne couvre pas est grisée
 - Section Archives : positions entièrement soldées, classées par compte d'origine
 - **Alertes de prix** : six seuils (au-dessus / en dessous du PRU, du dernier achat,
   de la dernière vente), une vérification par jour à l'heure de votre choix, fenêtre
@@ -213,8 +214,11 @@ l'accès local est direct (pas de page de connexion). Le premier chargement pren
 
 - Yahoo Finance ne cote pas certains produits dérivés (warrants Société Générale…) :
   ils sont valorisés au dernier prix de transaction connu.
-- L'historique de cours remonte à 10 ans maximum (au-delà, Yahoo ne renvoie plus de
-  cotations quotidiennes mais des barres mensuelles, inutilisables pour la valorisation).
+- L'historique de cours quotidien remonte à 10 ans (au-delà, Yahoo ne renvoie plus de
+  cotations quotidiennes). La vue « Tout » d'une position remonte plus loin grâce à une
+  série mensuelle séparée, plus grossière et convertie en euros au taux de change le plus
+  ancien connu quand elle précède l'historique de change — elle se lit pour sa forme et
+  son ordre de grandeur, pas au pourcent près.
 - Sur Vercel, le cache est éphémère : après une période d'inactivité, le premier
   chargement refait les appels Yahoo (~15-30 s).
 - Le Google Sheet doit rester partagé par lien pour être lisible par le serveur.

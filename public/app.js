@@ -34,12 +34,13 @@ const RANGES = [
 ];
 const RANGE_MONTHS = { "10y": 120, "8y": 96, "5y": 60, "3y": 36, "1y": 12, "6m": 6, "1m": 1 };
 // Periods offered for a single holding ("Performance du titre"), longest first. Drives
-// both the mobile pills and the desktop columns. "Tout" runs from the first purchase of
-// that asset; a period the quote history cannot cover comes back null from ownPerf and
-// its pill is greyed out rather than showing a shorter span under a longer label.
+// both the mobile pills and the desktop columns. "Tout" spans the whole listing history
+// (monthly bars), "Depuis achat" starts at the first purchase of that holding. A period
+// the quote history cannot cover comes back null from ownPerf and its pill is greyed out
+// rather than showing a shorter span under a longer label.
 const ASSET_PERIODS = [
-  ["Tout", "all"], ["10 A", "y10"], ["5 A", "y5"], ["3 A", "y3"], ["1 A", "y1"],
-  ["6 M", "m6"], ["1 M", "m1"], ["1 S", "w1"], ["1 J", "d1"],
+  ["Tout", "all"], ["Depuis achat", "since"], ["10 A", "y10"], ["5 A", "y5"], ["3 A", "y3"],
+  ["1 A", "y1"], ["6 M", "m6"], ["1 M", "m1"], ["1 S", "w1"], ["1 J", "d1"],
 ];
 const RANGE_LABEL = {
   max: "depuis l’ouverture", "10y": "sur 10 ans", "8y": "sur 8 ans", "5y": "sur 5 ans",
@@ -680,11 +681,18 @@ function assetRangePoints(data, key) {
       return arr.map(([t, v]) => ({ t, pct: (v / base - 1) * 100, price: v }));
     }
   }
+  // "Tout": the whole listing history, which only the monthly series reaches
+  if (key === "all") {
+    const monthly = data.monthly || [];
+    if (monthly.length < 2 || !(monthly[0][1] > 0)) return null;
+    const base = monthly[0][1];
+    return monthly.map(([d, v]) => ({ t: d, pct: (v / base - 1) * 100, price: v }));
+  }
   const daily = data.daily || [];
   if (daily.length < 2) return null;
   const endMs = Date.parse(daily[daily.length - 1][0]);
-  // "Tout" starts at the first purchase; the fixed periods count back from today
-  const startKey = key === "all"
+  // "Depuis achat" starts at the first purchase; the fixed periods count back from today
+  const startKey = key === "since"
     ? (data.firstBuyDate || daily[0][0])
     : new Date(endMs - ASSET_RANGE_DAYS[key] * 86400000).toISOString().slice(0, 10);
   const arr = daily.filter(([d]) => d >= startKey);
@@ -807,7 +815,7 @@ function assetPerfBox(p) {
   const { row, buttons } = miniPerfRow(o);
   box.append(wrap, note, row);
 
-  let selected = ["y1", "m6", "m1", "y3", "w1", "d1", "all"].find((k) => o[k] != null);
+  let selected = ["y1", "m6", "m1", "y3", "w1", "d1", "since", "all"].find((k) => o[k] != null);
   let data = null;
   const render = () => {
     for (const [k, b] of buttons) b.setAttribute("aria-selected", String(k === selected));

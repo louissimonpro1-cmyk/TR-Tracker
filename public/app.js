@@ -1199,12 +1199,20 @@ function renderBell() {
   const armed = state.alertConfig.enabled && anyThreshold(state.alertConfig);
   const n = state.alertTriggers.length;
   btn.classList.toggle("on", armed);
-  $("bellDot").hidden = n === 0;
-  btn.title = n ? `${n} alerte${n > 1 ? "s" : ""} déclenchée${n > 1 ? "s" : ""}`
-    : armed ? "Alertes actives — régler les seuils" : "Régler les alertes de prix";
+  btn.title = armed ? "Alertes actives — régler les seuils" : "Régler les alertes de prix";
+
+  // second icon, next to the bell: reopens the summary on demand, independently of
+  // whether it was already dismissed — the bell itself only ever opens settings now
+  const listBtn = $("alertListBtn");
+  listBtn.hidden = n === 0;
+  listBtn.title = n === 1 ? "1 alerte déclenchée" : `${n} alertes déclenchées`;
+  $("alertListDot").hidden = n === 0;
 }
 
 // ---------- alert popup ----------
+// One line per trigger, kept to the essentials (which situation, on which account,
+// how far past the threshold) — the exact threshold and reference price are one tap
+// away in the settings dialog, not worth repeating on every row here.
 function showAlertPopup() {
   const list = $("triggerList");
   list.replaceChildren();
@@ -1213,10 +1221,7 @@ function showAlertPopup() {
     row.append(logoEl(t.position));
     const main = el("div", "tg-main");
     main.append(el("div", "tg-name", t.position.name));
-    const bits = [t.label, `seuil ${pct(t.threshold, 1)}`, `cours ${price(t.position.priceEur)}`];
-    if (t.refPrice != null) bits.push(`réf. ${price(t.refPrice)}`);
-    bits.push(t.accountLabel);
-    main.append(el("div", "tg-sub", bits.join(" · ")));
+    main.append(el("div", "tg-sub", `${t.label} · ${t.accountLabel}`));
     row.append(main);
     row.append(el("div", "tg-pct " + signCls(t.actualPct), pct(t.actualPct, 1)));
     list.append(row);
@@ -1447,6 +1452,7 @@ state.alertConfig = loadAlertConfig();
 buildHourOptions();
 buildThresholdRows();
 $("bellBtn").addEventListener("click", openAlertSettings);
+$("alertListBtn").addEventListener("click", showAlertPopup);
 
 $("alertForm").addEventListener("submit", async (e) => {
   if (e.submitter?.value !== "save") return; // method="dialog" closes on Annuler too

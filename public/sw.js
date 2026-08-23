@@ -1,47 +1,20 @@
 /* Service worker: the only part of the app that runs while the tab is closed.
    Its single job is to turn a push into a notification. The pushes carry no payload
-   (see lib/push.mjs), so the real content is fetched here from /api/alerts with the
-   session cookie — that keeps the portfolio figures off the push provider's servers. */
+   (see lib/push.mjs) and the notification itself stays generic — the real figures
+   (which titles, which %) only ever show up inside the app, once you open it, so
+   nothing about your portfolio is readable from the notification alone. */
 "use strict";
 
-const FALLBACK_TITLE = "Alerte portefeuille";
-const FALLBACK_BODY = "Ouvre le tableau de bord pour voir les positions concernées.";
-
-const pctFr = (v) =>
-  (v > 0 ? "+" : "") + v.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %";
-
-async function buildNotification() {
-  try {
-    const r = await fetch("/api/alerts", { credentials: "include", cache: "no-store" });
-    if (!r.ok) return null;
-    const { triggers } = await r.json();
-    if (!triggers?.length) return null;
-    const lines = triggers.slice(0, 4).map((t) => `${t.name} · ${pctFr(t.actualPct)} ${t.label}`);
-    if (triggers.length > lines.length) lines.push(`+ ${triggers.length - lines.length} autre(s)`);
-    return {
-      title: triggers.length === 1 ? triggers[0].name : `${triggers.length} alertes sur ton portefeuille`,
-      body: lines.join("\n"),
-    };
-  } catch {
-    return null; // offline, or the session expired: the generic notification still shows
-  }
-}
-
 self.addEventListener("push", (event) => {
-  event.waitUntil((async () => {
-    const n = await buildNotification();
-    // a push event MUST end in a visible notification, otherwise the browser shows its
-    // own "this site was updated in the background" message and may revoke permission
-    await self.registration.showNotification(n?.title || FALLBACK_TITLE, {
-      body: n?.body || FALLBACK_BODY,
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
-      lang: "fr",
-      tag: "tr-alert",     // a newer alert replaces the previous one instead of stacking
-      renotify: true,
-      data: { url: "/?alert=1" },
-    });
-  })());
+  event.waitUntil(self.registration.showNotification("Alerte portefeuille", {
+    body: "Certains seuils paramétrés ont été atteints. Ouvre le tableau de bord pour voir le détail.",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    lang: "fr",
+    tag: "tr-alert",     // a newer alert replaces the previous one instead of stacking
+    renotify: true,
+    data: { url: "/?alert=1" },
+  }));
 });
 
 self.addEventListener("notificationclick", (event) => {

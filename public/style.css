@@ -268,10 +268,11 @@ td.sep, th.sep { border-left: 1px solid var(--grid); }
   background: var(--wash);
 }
 /* the table scrolls sideways; pinning the chart to the left keeps it on screen even
-   when the reader has scrolled out to the "Dernière vente" columns */
-.pos-detail .asset-chart-box {
-  position: sticky; left: 14px; margin-top: 0; max-width: 660px;
-}
+   when the reader has scrolled out to the "Dernière vente" columns. Width is set
+   inline by app.js to match the portfolio-wide chart's own rendered width — the
+   table itself can run far wider than the page, so a CSS max-width here would drift
+   out of sync with it. */
+.pos-detail .asset-chart-box { position: sticky; left: 14px; margin-top: 0; }
 
 /* sticky asset column (the header cell is sticky on both axes, so it sits on top) */
 .data-table th:first-child, .data-table td:first-child {

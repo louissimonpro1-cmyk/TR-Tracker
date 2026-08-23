@@ -549,8 +549,9 @@ function renderPositionTable(table, list) {
     tbody.append(row);
 
     // clicking a row reveals the same chart the mobile card shows, in a full-width
-    // row underneath; open state is shared with the cards through state.openCards
-    const perf = assetPerfBox(p);
+    // row underneath; open state is shared with the cards through state.openCards.
+    // `large`: same height/margins as the portfolio-wide chart at the top of the page.
+    const perf = assetPerfBox(p, true);
     if (!perf) continue;
     const detail = el("tr", "pos-detail");
     const cell = el("td");
@@ -702,14 +703,16 @@ function assetRangePoints(data, key) {
 }
 
 let miniGradSeq = 0;
-function renderMiniChart(wrap, svg, tip, pts, rangeKey) {
+// `large`: matches the height and margins of the portfolio-wide chart at the top of
+// the page (desktop position rows); the compact defaults stay for the mobile cards.
+function renderMiniChart(wrap, svg, tip, pts, rangeKey, large) {
   svg.replaceChildren();
   tip.hidden = true;
-  const W = wrap.clientWidth || 300, H = 120;
+  const W = wrap.clientWidth || 300, H = large ? 330 : 120;
   svg.setAttribute("width", W);
   svg.setAttribute("height", H);
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  const padL = 2, padR = 2, padT = 10, padB = 16;
+  const padL = large ? 6 : 2, padR = large ? 6 : 2, padT = large ? 16 : 10, padB = large ? 26 : 16;
   const n = pts.length;
   const ys = pts.map((p) => p.pct);
   let ymin = Math.min(...ys), ymax = Math.max(...ys);
@@ -746,7 +749,7 @@ function renderMiniChart(wrap, svg, tip, pts, rangeKey) {
   } else {
     sv("path", { d, stroke: "var(--accent)", ...lineAttrs }, svg);
   }
-  sv("circle", { cx: x(n - 1), cy: y(pts[n - 1].pct), r: 3, fill: "var(--accent)" }, svg);
+  sv("circle", { cx: x(n - 1), cy: y(pts[n - 1].pct), r: large ? 3.5 : 3, fill: "var(--accent)" }, svg);
 
   // span-based rather than keyed on the range name: "Tout" can cover three months or
   // eight years depending on when the position was opened
@@ -757,14 +760,15 @@ function renderMiniChart(wrap, svg, tip, pts, rangeKey) {
     const d = new Date(asMs(t));
     return (spanDays > 200 ? fmtMonYr : fmtDayMon).format(d);
   };
-  const l1 = sv("text", { x: padL, y: H - 4, fill: "var(--muted)", "font-size": 9.5, "font-family": "inherit" }, svg);
+  const fontSize = large ? 11 : 9.5;
+  const l1 = sv("text", { x: padL, y: H - (large ? 8 : 4), fill: "var(--muted)", "font-size": fontSize, "font-family": "inherit" }, svg);
   l1.textContent = xl(pts[0].t);
-  const l2 = sv("text", { x: W - padR, y: H - 4, fill: "var(--muted)", "font-size": 9.5, "text-anchor": "end", "font-family": "inherit" }, svg);
+  const l2 = sv("text", { x: W - padR, y: H - (large ? 8 : 4), fill: "var(--muted)", "font-size": fontSize, "text-anchor": "end", "font-family": "inherit" }, svg);
   l2.textContent = xl(pts[n - 1].t);
 
   const cross = sv("g", { visibility: "hidden" }, svg);
   const vline = sv("line", { y1: padT, y2: H - padB, stroke: "var(--baseline)", "stroke-width": 1, "stroke-dasharray": "3 3" }, cross);
-  const dot = sv("circle", { r: 3.5, fill: "var(--accent)", stroke: "var(--surface)", "stroke-width": 2 }, cross);
+  const dot = sv("circle", { r: large ? 4.5 : 3.5, fill: "var(--accent)", stroke: "var(--surface)", "stroke-width": 2 }, cross);
 
   const move = (e) => {
     const rect = svg.getBoundingClientRect();
@@ -800,7 +804,7 @@ function renderMiniChart(wrap, svg, tip, pts, rangeKey) {
 // position shows its curve straight away instead of hiding it behind a second fold.
 // `load` is deferred to the card opening — fetching a series per position on render
 // would fire one request per holding on every refresh.
-function assetPerfBox(p) {
+function assetPerfBox(p, large) {
   const o = p.ownPerf || {};
   if (!Object.values(o).some((v) => v != null)) return null; // no market data (warrants)
   const box = el("div", "asset-chart-box");
@@ -820,6 +824,12 @@ function assetPerfBox(p) {
   const render = () => {
     for (const [k, b] of buttons) b.setAttribute("aria-selected", String(k === selected));
     if (!data) return;
+    // width pinned to the portfolio-wide chart's own rendered width, so "same size"
+    // holds regardless of the table's own width (it can run far wider than the page)
+    if (large) {
+      const mainW = $("chartWrap")?.clientWidth;
+      if (mainW) { wrap.style.width = `${mainW}px`; box.style.width = `${mainW}px`; }
+    }
     const pts = assetRangePoints(data, selected);
     if (!pts) {
       svg.replaceChildren();
@@ -829,7 +839,7 @@ function assetPerfBox(p) {
       return;
     }
     note.hidden = true;
-    renderMiniChart(wrap, svg, tip, pts, selected);
+    renderMiniChart(wrap, svg, tip, pts, selected, large);
   };
   for (const [k, b] of buttons) {
     b.addEventListener("click", () => { selected = k; render(); });

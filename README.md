@@ -215,7 +215,14 @@ l'accès local est direct (pas de page de connexion). Le premier chargement pren
 ## Limites connues
 
 - Yahoo Finance ne cote pas certains produits dérivés (warrants Société Générale…) :
-  ils sont valorisés au dernier prix de transaction connu.
+  ils sont valorisés au dernier prix de transaction connu, et **n'ont donc pas de
+  graphique de performance** — il n'existe aucune série de cours à tracer. Le badge
+  « ≈ » accolé au nom signale cette valorisation approximative.
+- La résolution ISIN → symbole passe par la recherche de Yahoo, qui ne répond pas
+  pour tous les titres et peut renvoyer une cotation secondaire à l'historique court.
+  Les cas connus sont épinglés dans `SYMBOL_OVERRIDES` (lib/yahoo.mjs) : si un titre
+  n'affiche aucun graphique en ligne alors qu'il en affiche un en local, c'est cette
+  recherche qui a échoué, et il faut y ajouter son symbole.
 - L'historique de cours quotidien remonte à 10 ans (au-delà, Yahoo ne renvoie plus de
   cotations quotidiennes). La vue « Tout » d'une position remonte plus loin grâce à une
   série mensuelle séparée, plus grossière et convertie en euros au taux de change le plus

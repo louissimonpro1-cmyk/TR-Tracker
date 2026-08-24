@@ -528,6 +528,21 @@ details.pcard[open] .pcard-chev { transform: rotate(90deg); }
 .tg-pct { font-size: 13.5px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* ---------- responsive ---------- */
+
+/* Layout switch, kept separate from the phone-sized tweaks below because the two
+   answer different questions. The position tables are ~1560 px wide: at 900 px only
+   a bit over half of one is on screen, the rest reachable by scrolling sideways. So
+   accounts and archives fall back to stacked cards, which carry the same figures —
+   own chart included — with nothing hidden off to the right.
+   900 px sits above every tablet portrait width (iPad 768 to 834) so tablets take the
+   cards, while tablets in landscape and laptops keep the table. */
+@media (max-width: 900px) {
+  .section-fold .scroll-x { display: none; }
+  .cards-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+}
+
+/* Phone-sized screens only: tighten spacing and type. Deliberately NOT applied to
+   tablets, where there is room to spare and shrinking would only hurt legibility. */
 @media (max-width: 680px) {
   .modal-box { padding: 16px; border-radius: 14px; gap: 14px; }
   .thresholds { grid-template-columns: 1fr auto auto; gap: 7px 8px; }
@@ -548,9 +563,6 @@ details.pcard[open] .pcard-chev { transform: rotate(90deg); }
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   }
   .a-sub { display: none; }
-  /* account & archive sections switch from tables to stacked cards */
-  .section-fold .scroll-x { display: none; }
-  .cards-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
   #periodPct { font-size: 20px; }
   .ranges { overflow-x: auto; }
   .ranges button { padding: 6px 9px; }

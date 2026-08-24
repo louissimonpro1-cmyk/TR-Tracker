@@ -114,14 +114,41 @@ Vous devez voir :
 
 ---
 
-## Étape 5 : installer sur téléphone
+## Étape 5 : installer comme application
 
-1. Ouvrez votre adresse Vercel dans le navigateur du téléphone
+Le dashboard s'installe comme une vraie application, sur ordinateur comme sur
+téléphone. Ce n'est pas obligatoire, mais c'est plus agréable qu'un onglet, et
+**c'est indispensable sur iPhone pour recevoir les notifications**.
+
+### Sur ordinateur (Windows, macOS, Linux)
+
+Avec **Chrome** ou **Edge** :
+
+1. Ouvrez votre adresse Vercel et connectez-vous
+2. Dans la barre d'adresse, tout à droite, une petite icône d'installation apparaît
+   (un écran avec une flèche). Cliquez dessus, puis sur **Installer**.
+3. Si vous ne la voyez pas : menu **⋮** en haut à droite, puis cherchez
+   **Installer TR Tracker** (parfois rangé sous « Applications » ou « Cast, enregistrer
+   et partager » selon la version)
+
+TR Tracker s'ouvre alors dans sa propre fenêtre, avec son icône dans la barre des
+tâches. Firefox ne propose pas cette installation : le dashboard y reste un onglet
+normal, pleinement fonctionnel.
+
+### Sur iPhone et iPad
+
+1. Ouvrez votre adresse Vercel **dans Safari** (Chrome iOS ne sait pas installer)
 2. Connectez-vous
-3. **iPhone** : bouton Partager, puis « Sur l'écran d'accueil »
-   **Android** : menu à trois points, puis « Ajouter à l'écran d'accueil »
+3. Bouton **Partager** (le carré avec la flèche), puis **« Sur l'écran d'accueil »**
 
-L'icône TR Tracker apparaît comme une vraie application.
+**Cette étape n'est pas facultative si vous voulez les notifications** : iOS ne les
+autorise que depuis une app installée sur l'écran d'accueil, jamais depuis un onglet
+Safari. Il faut iOS 16.4 ou plus récent.
+
+### Sur Android
+
+Ouvrez l'adresse dans Chrome, menu à trois points, puis **« Installer l'application »**
+ou **« Ajouter à l'écran d'accueil »**.
 
 ---
 

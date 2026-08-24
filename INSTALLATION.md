@@ -163,6 +163,16 @@ Safari. Il faut iOS 16.4 ou plus récent.
 Ouvrez l'adresse dans Chrome, menu à trois points, puis **« Installer l'application »**
 ou **« Ajouter à l'écran d'accueil »**.
 
+Contrairement à iPhone, **l'installation n'est pas nécessaire pour les notifications** :
+Chrome sur Android les délivre depuis un onglet ordinaire. Elle reste conseillée pour
+le confort, et parce qu'une app posée sur l'écran d'accueil a moins de risque d'être
+fermée par le système qu'un onglet parmi vingt.
+
+Si les notifications n'arrivent pas alors que tout est activé, regardez du côté de
+l'économiseur de batterie : plusieurs constructeurs (Samsung, Xiaomi, Huawei, Oppo)
+suspendent les applications en arrière-plan de façon agressive. Il faut alors retirer
+Chrome, ou TR Tracker s'il est installé, de cette optimisation.
+
 ---
 
 ## Étape 6 (optionnel) : les alertes de prix

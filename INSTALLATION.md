@@ -116,9 +116,22 @@ Vous devez voir :
 
 ## Étape 5 : installer comme application
 
-Le dashboard s'installe comme une vraie application, sur ordinateur comme sur
-téléphone. Ce n'est pas obligatoire, mais c'est plus agréable qu'un onglet, et
-**c'est indispensable sur iPhone pour recevoir les notifications**.
+TR Tracker peut s'ajouter à votre système comme une application, sur ordinateur
+comme sur téléphone. Soyons clairs sur ce que cela recouvre : **il n'y a pas de
+logiciel à installer**, pas d'exécutable, pas d'installateur. Le navigateur crée
+un raccourci et ouvre le même site dans une fenêtre sans barre d'adresse ni onglets.
+Le code continue de tourner dans le navigateur, et la page vient toujours du serveur.
+
+Ce que cela apporte : une fenêtre dédiée, une icône dans la barre des tâches ou sur
+l'écran d'accueil, une session qui ne se perd plus parmi les autres onglets.
+
+Ce que cela n'apporte pas : **aucun fonctionnement hors connexion**. Le service
+worker ne sert qu'à recevoir les notifications, il ne met aucune page en cache. Sans
+réseau, la fenêtre installée affiche une erreur comme le ferait un onglet. C'est
+assumé : un suivi de portefeuille sans cours à jour n'aurait rien à montrer.
+
+Sur iPhone en revanche, cette étape **n'est pas du confort** : c'est la seule
+manière d'avoir les notifications.
 
 ### Sur ordinateur (Windows, macOS, Linux)
 

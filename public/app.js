@@ -1196,6 +1196,15 @@ const ALERT_GROUPS = [
 const BROWSER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Paris";
 const PUSH_SUPPORTED = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
+// iOS exposes no Notification API at all in a normal Safari tab: push only exists once
+// the PWA sits on the home screen. Without this distinction the interface would tell an
+// iPhone user their browser cannot do push, which is wrong and gives them nothing to act on.
+// iPadOS reports itself as macOS, hence the touch-point check.
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+const IS_STANDALONE = navigator.standalone === true
+  || window.matchMedia("(display-mode: standalone)").matches;
+
 function normalizeAlertConfig(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   const hour = Number(src.hour);
@@ -1385,6 +1394,9 @@ async function renderPushState() {
   const setUp = (text, why) => { label.textContent = text; hint.textContent = why; };
 
   if (!PUSH_SUPPORTED) {
+    if (IS_IOS && !IS_STANDALONE) {
+      return setUp("à installer", "Sur iPhone et iPad, les notifications ne sont possibles qu’une fois l’app ajoutée à l’écran d’accueil : bouton Partager, puis « Sur l’écran d’accueil ». Rouvrez ensuite TR Tracker depuis son icône, et le bouton d’activation apparaîtra ici.");
+    }
     return setUp("non supporté", "Ce navigateur ne gère pas les notifications push. Les alertes restent visibles à l’ouverture du tableau de bord.");
   }
   if (!pushInfo) return setUp("…", "Vérification de la configuration du serveur.");
@@ -1420,10 +1432,13 @@ async function togglePush(on) {
   const btn = $("pushToggle");
   btn.disabled = true;
   try {
+    // WebKit only honours requestPermission() while the click's transient activation is
+    // still live, and any await beforehand spends it — on iOS the prompt then simply
+    // never appears. So the permission is asked first, before touching the worker.
+    if (on && await Notification.requestPermission() !== "granted") { await renderPushState(); return; }
     const reg = await ensureSW();
     if (!reg) throw new Error("service worker indisponible");
     if (on) {
-      if (await Notification.requestPermission() !== "granted") { await renderPushState(); return; }
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlB64ToBytes(pushInfo.push.publicKey),

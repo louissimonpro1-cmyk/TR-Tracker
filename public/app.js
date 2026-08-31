@@ -681,15 +681,13 @@ function assetRangePoints(data, key) {
     }
     return pts;
   }
-  // 1S / 1M: hourly bars (one point per market hour; ~4 per day on 1M)
+  // 1S / 1M: half-hourly bars, roughly 66 points over the week and 274 over the month.
+  // The month used to be thinned to one point in four, a leftover from when these charts
+  // were 120 px tall thumbnails; at the sizes they are drawn now that only cost detail.
   if ((key === "w1" || key === "m1") && data.hourly?.length >= 2) {
     const endT = data.hourly[data.hourly.length - 1][0];
     const startT = endT - (key === "w1" ? 7 : 30) * 86400000;
-    let arr = data.hourly.filter(([t]) => t >= startT);
-    if (key === "m1") {
-      const n = arr.length;
-      arr = arr.filter((_, i) => i === 0 || (n - 1 - i) % 4 === 0);
-    }
+    const arr = data.hourly.filter(([t]) => t >= startT);
     if (arr.length >= 2 && arr[0][1] > 0) {
       const base = arr[0][1];
       return arr.map(([t, v]) => ({ t, pct: (v / base - 1) * 100, price: v }));

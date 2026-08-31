@@ -19,7 +19,9 @@ const STEPS = [
   {
     centred: true,
     title: "Bienvenue dans TR Tracker",
-    text: "Ce tableau de bord suit votre portefeuille Trade Republic en direct. Un tour rapide en six étapes ? Vous pourrez le relancer plus tard depuis le bas de la page.",
+    // no step count here on purpose: the tour drops steps whose target is absent, so a
+    // fixed number in the text would contradict the "Étape n sur N" counter
+    text: "Ce tableau de bord suit votre portefeuille Trade Republic en direct. Un tour rapide de l'essentiel ? Vous pourrez le relancer à tout moment depuis le bas de la page.",
     okLabel: "Faire le tour",
     skipLabel: "Non merci",
   },

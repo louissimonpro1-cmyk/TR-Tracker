@@ -1534,7 +1534,10 @@ new ResizeObserver(() => {
 state.alertConfig = loadAlertConfig();
 buildHourOptions();
 buildThresholdRows();
-$("tourReplay").addEventListener("click", () => window.tour?.start());
+// optional chaining on purpose: a cached index.html without this button must not throw
+// here, since an exception at this point would abort the rest of the script and leave
+// the whole dashboard unrendered
+$("tourReplay")?.addEventListener("click", () => window.tour?.start());
 $("bellBtn").addEventListener("click", openAlertSettings);
 $("alertListBtn").addEventListener("click", showAlertPopup);
 

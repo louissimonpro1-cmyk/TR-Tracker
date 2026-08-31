@@ -163,6 +163,15 @@ function place(target) {
 function reposition() { if (ui && current !== undefined) place(current); }
 
 async function go(i) {
+  try { await step_(i); } catch (e) {
+    // The tour is a nicety layered on top of the dashboard. If anything in it fails, it
+    // must take itself down rather than leave a full-screen overlay swallowing clicks.
+    console.warn("tour:", e);
+    finish();
+  }
+}
+
+async function step_(i) {
   idx = i;
   const step = order[i];
   if (step.before) { try { step.before(); } catch { /* a step must never break the page */ } }
@@ -201,6 +210,11 @@ function finish() {
 
 function start() {
   if (ui) return;
+  // never let a broken tour take the dashboard down with it
+  try { startInner(); } catch (e) { console.warn("tour:", e); finish(); }
+}
+
+function startInner() {
   // steps are filtered once at the start so "Étape 3 sur 6" counts what will be shown
   order = STEPS.filter((s) => {
     if (s.before) { try { s.before(); } catch { /* ignore */ } }

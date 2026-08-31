@@ -1506,6 +1506,11 @@ async function refresh(soft) {
     $("loading").hidden = true;
     renderAll();
     maybeShowAlerts();
+    // First visit only, and only once the data is on screen: the tour points at real
+    // sections, which do not exist while the page is still loading. It also yields to
+    // the alert popup, so a first visit that already has breached thresholds does not
+    // stack two dialogs.
+    if (!soft && !document.querySelector("dialog[open]")) window.tour?.startIfFirstVisit();
   } catch (e) {
     if (!state.dashboard) showError(e);
     else console.warn("refresh:", e);
@@ -1529,6 +1534,7 @@ new ResizeObserver(() => {
 state.alertConfig = loadAlertConfig();
 buildHourOptions();
 buildThresholdRows();
+$("tourReplay").addEventListener("click", () => window.tour?.start());
 $("bellBtn").addEventListener("click", openAlertSettings);
 $("alertListBtn").addEventListener("click", showAlertPopup);
 

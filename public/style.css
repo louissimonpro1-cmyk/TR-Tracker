@@ -527,6 +527,53 @@ details.pcard[open] .pcard-chev { transform: rotate(90deg); }
 .tg-sub { color: var(--muted); font-size: 11.5px; margin-top: 1px; }
 .tg-pct { font-size: 13.5px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
+/* ---------- guided tour ---------- */
+/* The dim is painted by a huge spread shadow around the highlighted box rather than by
+   a full-screen layer with a cut-out: one element, no clip-path, and the hole follows
+   the target by moving a single node. */
+.tour-root { position: fixed; inset: 0; z-index: 60; opacity: 0; transition: opacity .18s ease; }
+.tour-root.on { opacity: 1; }
+.tour-hole {
+  position: fixed; border-radius: 10px; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  transition: left .2s ease, top .2s ease, width .2s ease, height .2s ease;
+}
+/* centred steps have no target, so the dim comes from the backdrop itself */
+.tour-hole[hidden] { display: none; }
+.tour-root.centred { background: rgba(0, 0, 0, 0.55); }
+
+.tour-pop {
+  position: fixed; width: max-content; max-width: 360px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 14px;
+  padding: 16px 18px; box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+}
+.tour-step { color: var(--muted); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.tour-step:empty { display: none; }
+.tour-pop h2 { font-size: 16px; margin: 6px 0 0; }
+.tour-text { color: var(--text-2); font-size: 13.5px; line-height: 1.5; margin: 8px 0 0; }
+.tour-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.tour-spacer { flex: 1; }
+.tour-actions button {
+  font: inherit; font-size: 13px; padding: 7px 14px; border-radius: 9px;
+  border: 1px solid var(--border); background: transparent; color: var(--text-2); cursor: pointer;
+}
+.tour-actions button:hover { background: var(--wash); }
+.tour-next { background: var(--text) !important; color: var(--page) !important; border-color: var(--text) !important; font-weight: 600; }
+.tour-next:hover { opacity: .88; }
+.tour-skip { color: var(--muted); border-color: transparent; }
+
+.tour-replay {
+  font: inherit; font-size: inherit; color: var(--muted);
+  background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline;
+}
+.tour-replay:hover { color: var(--text-2); }
+
+@media (max-width: 480px) {
+  .tour-pop { max-width: calc(100vw - 24px); padding: 14px 15px; }
+  .tour-actions { flex-wrap: wrap; }
+}
+
 /* ---------- responsive ---------- */
 
 /* Layout switch, kept separate from the phone-sized tweaks below because the two
